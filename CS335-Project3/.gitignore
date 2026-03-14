@@ -37,4 +37,4 @@ src/main/resources/application-local.properties
 
 # Logs
 *.log
-logs/
+logs/target/
