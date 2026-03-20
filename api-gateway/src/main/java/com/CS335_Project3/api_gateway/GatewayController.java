@@ -1,7 +1,6 @@
 package com.CS335_Project3.api_gateway;
 
-import org.springframework.boot.autoconfigure.graphql.GraphQlProperties.Http;
-//import HTTP
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,16 +12,21 @@ import org.springframework.web.client.RestTemplate;
 public class GatewayController {
 
     private final String BACKEND_URL = "http://localhost:8081/api/";
+    
+    private final RestTemplate restTemplate;
+    
+    @Autowired
+    public GatewayController(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     @GetMapping
     public String getNotes(@PathVariable String guid) {
-        RestTemplate restTemplate = new RestTemplate();
         return restTemplate.getForObject(BACKEND_URL + guid + "/notes", String.class);
     }
 
     @PostMapping
     public String createNote(@PathVariable String guid, @RequestBody String body) {
-        RestTemplate restTemplate = new RestTemplate();
 
         //create a headers object
         HttpHeaders headers = new HttpHeaders();
@@ -44,8 +48,6 @@ public class GatewayController {
 
     @PutMapping("/{id}")
     public String updateNote(@PathVariable String guid, @PathVariable String id, @RequestBody String body) {
-        RestTemplate restTemplate = new RestTemplate();
-
         //same as POST - set request headers
          HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -64,7 +66,6 @@ public class GatewayController {
 
     @DeleteMapping("/{id}")
     public String deleteNote(@PathVariable String guid, @PathVariable String id) {
-        RestTemplate restTemplate = new RestTemplate();
         restTemplate.delete(BACKEND_URL + guid + "/notes/" + id);
         return "Deleted";
     }

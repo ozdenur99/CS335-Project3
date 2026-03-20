@@ -1,0 +1,8 @@
+# Server Port (API Gateway)
+server.port=8080
+
+# Spring Application Name
+spring.application.name=api-gateway
+
+# API Keys (comma-separated). Defaults to dev-key-alpha,dev-key-beta if not set
+# gateway.api-keys=your-key-1,your-key-2
