@@ -1,5 +1,6 @@
 package com.CS335_Project3.api_gateway.filter;
 
+import com.CS335_Project3.api_gateway.RateLimiter;
 import com.CS335_Project3.api_gateway.config.ApiKeyConfig;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +27,7 @@ class ApiKeyFilterTest {
     void setUp() {
         ApiKeyConfig config = new ApiKeyConfig();
         config.setApiKeys(List.of("key-alpha", "key-beta"));
-        filter = new ApiKeyFilter(config);
+        filter = new ApiKeyFilter(config, new RateLimiter());
     }
 
 
@@ -135,5 +136,34 @@ class ApiKeyFilterTest {
         assertThat(body).contains("\"status\":401");
         assertThat(body).contains("\"error\":\"Unauthorized\"");
         assertThat(body).contains("\"path\":\"/api/test123/notes\"");
+    }
+
+    @Test
+    void sixthRequest_shouldReturn429() throws ServletException, IOException {
+        for (int i = 1; i <= 5; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest();
+            request.addHeader("X-API-Key", "key-alpha");
+            request.setRequestURI("/api/test123/notes");
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            MockFilterChain chain = new MockFilterChain();
+
+            filter.doFilterInternal(request, response, chain);
+
+            assertThat(response.getStatus()).isEqualTo(200);
+            assertThat(chain.getRequest()).isNotNull();
+    }
+
+    MockHttpServletRequest request6 = new MockHttpServletRequest();
+    request6.addHeader("X-API-Key", "key-alpha");
+    request6.setRequestURI("/api/test123/notes");
+    MockHttpServletResponse response6 = new MockHttpServletResponse();
+    MockFilterChain chain6 = new MockFilterChain();
+
+    filter.doFilterInternal(request6, response6, chain6);
+
+    assertThat(response6.getStatus()).isEqualTo(429);
+    assertThat(chain6.getRequest()).isNull();
+    assertThat(response6.getContentAsString())
+        .contains("Rate limit exceeded");
     }
 }
