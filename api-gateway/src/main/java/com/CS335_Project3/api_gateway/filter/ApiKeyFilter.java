@@ -1,5 +1,6 @@
 package com.CS335_Project3.api_gateway.filter;
 
+import com.CS335_Project3.api_gateway.RateLimiter;
 import com.CS335_Project3.api_gateway.config.ApiKeyConfig;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -37,9 +38,13 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
     private final ApiKeyConfig apiKeyConfig;
 
+    //inject the rate limiter
+    private final RateLimiter rateLimiter;
 
-    public ApiKeyFilter(ApiKeyConfig apiKeyConfig) {
+
+    public ApiKeyFilter(ApiKeyConfig apiKeyConfig, RateLimiter rateLimiter) {
         this.apiKeyConfig = apiKeyConfig;
+        this.rateLimiter = rateLimiter;
     }
 
 
@@ -66,15 +71,25 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("BLOCKED reason=missing_key path={}", path);
-            sendError(response, request, "Missing X-API-Key header");
+            sendError(response, request, HttpServletResponse.SC_UNAUTHORIZED,
+                "Unauthorized", "Missing X-API-Key header");
             return;  // do NOT call filterChain.doFilter after sending an error
         }
 
 
         if (!apiKeyConfig.isValidKey(apiKey)) {
             log.warn("BLOCKED reason=invalid_key key={} path={}", apiKey, path);
-            sendError(response, request, "Invalid API key");
+            sendError(response, request, HttpServletResponse.SC_UNAUTHORIZED,
+                "Unauthorized", "Invalid API key");
             return;  // do NOT call filterChain.doFilter after sending an error
+        }
+
+        //Rate limiter logic
+        if(!rateLimiter.isRequestAllowed(apiKey.toLowerCase())){
+            log.warn("BLOCKED reason=rate_limit_exceeded key={} path={}", apiKey, path);
+            sendError(response, request, 429,
+                "Too Many Requests", "Rate limit exceeded");
+            return;
         }
 
 
@@ -85,17 +100,20 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
 
     private void sendError(HttpServletResponse response,
-                           HttpServletRequest request,
-                           String message) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                          HttpServletRequest request,
+                          int status,
+                          String error,
+                          String message) throws IOException {
+        response.setStatus(status);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
         response.getWriter().write(String.format(
-            "{\"status\":401,\"error\":\"Unauthorized\"," +
-            "\"message\":\"%s\",\"path\":\"%s\"}",
+        "{\"status\":%d,\"error\":\"%s\",\"message\":\"%s\",\"path\":\"%s\"}",
+            status,
+            error,
             message,
             request.getRequestURI()
-        ));
-    }
+    ));
+}
 }
 
