@@ -13,9 +13,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 //@Component makes it run once only, making all filters share the same log list
-//@Order(2) makes the filter run after ApiKeyFilter (which is @Order 1)
 @Component
-@Order(2)
+@Order(1)
 public class LoggingFilter extends OncePerRequestFilter {
 
     //we inject RequestLogger and MetricsService so we can record what happened
@@ -60,7 +59,7 @@ public class LoggingFilter extends OncePerRequestFilter {
         } else if (status == 429) {
             decision = "BLOCKED";
             reason   = "rate_limit_exceeded";
-        } else if (status == 403) {
+        } else if (status == 403) { //waiting for AbuseFilter to implement
             decision = "BLOCKED";
             reason   = "abuse_detected";
         } else {

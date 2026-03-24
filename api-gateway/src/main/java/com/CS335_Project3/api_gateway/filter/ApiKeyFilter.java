@@ -18,7 +18,7 @@ import java.util.List;
 
 
 @Component
-@Order(1)
+@Order(2)
 public class ApiKeyFilter extends OncePerRequestFilter {
 
 
