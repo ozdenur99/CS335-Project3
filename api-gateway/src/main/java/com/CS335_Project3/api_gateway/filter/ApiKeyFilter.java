@@ -33,7 +33,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     // /health — lets teammates check the Gateway is running without a key.
     // /metrics — lets Mateo's metrics endpoint work without a key.
     private static final List<String> EXCLUDED_PATHS =
-        List.of("/health", "/metrics");
+        List.of("/health", "/metrics", "/metrics/logs");
 
 
     private final ApiKeyConfig apiKeyConfig;
