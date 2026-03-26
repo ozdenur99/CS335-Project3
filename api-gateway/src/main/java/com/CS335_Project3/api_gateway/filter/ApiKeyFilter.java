@@ -40,6 +40,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
     //inject the rate limiter
     private final RateLimiter rateLimiter;
+    private final RateLimiter2 rateLimiter2;
 
 
     public ApiKeyFilter(ApiKeyConfig apiKeyConfig, RateLimiter rateLimiter) {
