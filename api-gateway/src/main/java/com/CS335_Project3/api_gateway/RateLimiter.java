@@ -8,29 +8,42 @@ import java.util.Map;
 public class RateLimiter {
     
     /*
-        Simple fixed-window rate limiter. We can expand and change to for e.g token bucket later
+       Token bucket rate limiter.
 
-        Basic Concept:
-
-        Each client gets fixed time window (in this case i chose 1 minute)
-        During that window we count how many requests they make
-
-        If thes number of requests they make goes over the limit, which I chose as 5,
-        then their request should be rejected
-
-        Once the window has expired, the rquesst count resets and the client can send requests again
+       Concept:
+       Each client has a bucket that contains tokens.
+       every request they make uses up one token.
+       Tokens are added back over time at a fixed refill rate
+       If the bucket has no tokens left then the request is rejected
     */
 
-    // HashMaps created:
-    // requestCounts = Stores how many requests a client has made
-    // windowStart = Stores the time when the rate limit window started for a client
-    private Map<String, Integer> requestCounts = new HashMap<>();
-    private Map<String, Long> windowStart = new HashMap<>();
+    /*
+        This is a helper class to store each clients bucket state
+        Tokens = how many tokens client has
+        lastRefillTime = when last refilled their bucket
+    */
+    private static class Bucket{
+        double tokens;
+        long lastRefillTime;
 
-    // Limit is max amount of reqs
-    // Window is timeframe in milliseconds (1 minute)
-    private final int limit = 5;
-    private final long window = 60000;
+        Bucket(double tokens, long lastRefillTime){
+            this.tokens = tokens;
+            this.lastRefillTime = lastRefillTime;
+        }
+    }
+
+
+    // HashMaps created:
+    // Store one bucket per each client
+    private Map<String, Bucket> buckets = new HashMap<>();
+
+    // Set the desired capacity of the bucket
+    private final int capacity = 5;
+
+    // Set the refill rate of bucket
+    // For example 5 tokens added every one minute
+    private final double refillRate = 5.0 / 60000.0;
+    
 
     /* 
         This method will be called by our API key flter later
@@ -44,38 +57,35 @@ public class RateLimiter {
         long now = System.currentTimeMillis();
 
         // If this is the users first rquest,
-        // we initialise their rate limit window and request counter
-        if(!windowStart.containsKey(clientId)){
-            windowStart.put(clientId, now);             // start a new window
-            requestCounts.put(clientId, 0);      // initialise their counter
+        // Create a new bucket for them
+        // The bucket starts at full capacity
+        if(!buckets.containsKey(clientId)){
+            buckets.put(clientId, new Bucket(capacity, now));          
         }
 
-        // Get the time when the users current window has started
-        long startTime = windowStart.get(clientId);
+        // Get client bucket
+        Bucket bucket = buckets.get(clientId);
 
-        // This is basically the core of the fixed window rate limiter
-        // We check if the clients current window has expired
-        // If this is the case we reset their window and their request count
-        if(now - startTime > window){
+        // Get how much time has passed since their last refill
+        // and add the tokens back
+        long timePassed = now - bucket.lastRefillTime;
+        double tokensToAdd = timePassed * refillRate;
 
-            // Reset the window start time
-            windowStart.put(clientId, now);
+        // refill the bucket, but make sure it does not go over the max cap
+        bucket.tokens = Math.min(capacity, bucket.tokens + tokensToAdd);
 
-            // Reset the count
-            requestCounts.put(clientId, 0);
+        // update the refill timestamp to now
+        bucket.lastRefillTime = now;
+
+        // If the client has at least 1 token.
+        // we allow the request and consume 1 token
+        if(bucket.tokens >= 1.0){
+            bucket.tokens -= 1.0;
+            return true;
         }
 
-        // Get the curent request count for the client
-        int count = requestCounts.get(clientId);
-
-        // Increase the count
-        count++;
-
-        // Update with the new count
-        requestCounts.put(clientId, count);
-
-        // return the allowed request, if the client is under the limit
-        return count <= limit;
+        // otherwise we reject their request
+        return false;
     }
 
 
