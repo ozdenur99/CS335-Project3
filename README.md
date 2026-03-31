@@ -21,6 +21,13 @@ This project implements a **Rate Limiting and Abuse Detection API Gateway**. Whi
 | **API Client** | Acts as a postman for all manual and automated testing |
 
 ---
+For more details, please refer to our Docs.
+## Documentation
+- [Architecture Decisions (ADRs)](./docs/architecture/decisions.md)
+- [Testing Results](./docs/testing)
+- [Algorithms Logic Specs](./docs/algorithms)
+- [Weekly Meeting Minutes](./docs/communication/weekly-meetings.md)
+- [API Specification](./docs/api/endpoints.md)
 
 ## Architecture
 
