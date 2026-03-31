@@ -23,11 +23,11 @@ This project implements a **Rate Limiting and Abuse Detection API Gateway**. Whi
 ---
 For more details, please refer to our Docs.
 ## Documentation
-- [Architecture Decisions (ADRs)](./docs/architecture/decisions.md)
-- [Testing Results](./docs/testing)
-- [Algorithms Logic Specs](./docs/algorithms)
-- [Weekly Meeting Minutes](./docs/communication/weekly-meetings.md)
-- [API Specification](./docs/api/endpoints.md)
+- [Architecture Decisions (ADRs)](./docs/01-architecture/decisions.md)
+- [Testing Results](./docs/03-testing)
+- [Algorithms Logic Specs](./docs/02-algorithms)
+- [Weekly Meeting Minutes](./docs/04-communication/weekly-meetings.md)
+- [API Specification](./docs/01-architecture/endpoints.md)
 
 ## Architecture
 
