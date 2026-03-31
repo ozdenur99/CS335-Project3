@@ -66,7 +66,7 @@ Current cope:
 This rate limiter stores the counters in memory meaning when the gateway restarts, the
 counters reset.
 Further down the line, if we have time, we can use Redis potentially to fix this.
-![alt text](image.png)
+
 6. Architecture sketch
 https://excalidraw.com/#room=f78d67fb86f551429f25,RjABcy6uMKNo5UiRu7y7tg
 
