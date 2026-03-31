@@ -11,11 +11,17 @@ import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
+import java.util.List;
 
 //@Component makes it run once only, making all filters share the same log list
 @Component
 @Order(1)
 public class LoggingFilter extends OncePerRequestFilter {
+
+    //these paths are excluded from logging so browser generated
+    //requests don't pollute the metrics counts
+    private static final List<String> EXCLUDED_PATHS =
+            List.of("/health", "/metrics", "/metrics/logs", "/favicon.ico");
 
     //we inject RequestLogger and MetricsService so we can record what happened
     private final RequestLogger requestLogger;
@@ -31,6 +37,12 @@ public class LoggingFilter extends OncePerRequestFilter {
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain chain)
             throws ServletException, IOException {
+
+        //skip logging for internal/static paths
+        if (EXCLUDED_PATHS.contains(request.getRequestURI())) {
+            chain.doFilter(request, response);
+            return;
+        }
 
         //we grab the API key and path from the request before passing it on
         String apiKey = request.getHeader("X-API-Key");
@@ -59,7 +71,7 @@ public class LoggingFilter extends OncePerRequestFilter {
         } else if (status == 429) {
             decision = "BLOCKED";
             reason   = "rate_limit_exceeded";
-        } else if (status == 403) { //waiting for AbuseFilter to implement
+        } else if (status == 403) {
             decision = "BLOCKED";
             reason   = "abuse_detected";
         } else {
