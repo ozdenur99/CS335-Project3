@@ -25,9 +25,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
     private static final Logger log =
         LoggerFactory.getLogger(ApiKeyFilter.class);
 
-
     private static final String API_KEY_HEADER = "X-API-Key";
-
 
     // These paths bypass API key validation.
     // /health — lets teammates check the Gateway is running without a key.
