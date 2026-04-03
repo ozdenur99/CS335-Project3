@@ -72,7 +72,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("BLOCKED reason=missing_key path={}", path);
             sendError(response, request, HttpServletResponse.SC_UNAUTHORIZED,
-                "Unauthorized", "Missing X-API-Key header");
+                "Unauthorized", "Request could not be authorised.");
             return;  // do NOT call filterChain.doFilter after sending an error
         }
 
@@ -80,7 +80,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         if (!apiKeyConfig.isValidKey(apiKey)) {
             log.warn("BLOCKED reason=invalid_key key={} path={}", apiKey, path);
             sendError(response, request, HttpServletResponse.SC_UNAUTHORIZED,
-                "Unauthorized", "Invalid API key");
+                "Unauthorized", "Request could not be authorised.");
             return;  // do NOT call filterChain.doFilter after sending an error
         }
 
@@ -88,7 +88,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         if(!rateLimiter.isRequestAllowed(apiKey.toLowerCase())){
             log.warn("BLOCKED reason=rate_limit_exceeded key={} path={}", apiKey, path);
             sendError(response, request, 429,
-                "Too Many Requests", "Rate limit exceeded");
+                "Too Many Requests", "Request could not be processed at this time.");
             return;
         }
 

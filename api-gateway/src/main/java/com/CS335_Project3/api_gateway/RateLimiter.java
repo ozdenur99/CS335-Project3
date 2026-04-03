@@ -6,87 +6,119 @@ import java.util.Map;
 
 @Component
 public class RateLimiter {
-    
-    /*
-       Token bucket rate limiter.
-
-       Concept:
-       Each client has a bucket that contains tokens.
-       every request they make uses up one token.
-       Tokens are added back over time at a fixed refill rate
-       If the bucket has no tokens left then the request is rejected
-    */
 
     /*
-        This is a helper class to store each clients bucket state
-        Tokens = how many tokens client has
-        lastRefillTime = when last refilled their bucket
-    */
-    private static class Bucket{
-        double tokens;
-        long lastRefillTime;
+        This class acts as the main entry point for rate limiting.
 
-        Bucket(double tokens, long lastRefillTime){
-            this.tokens = tokens;
-            this.lastRefillTime = lastRefillTime;
-        }
+        It holds multiple rate limiting strategies and chooses
+        which one to use based on the client.
+
+        This allows different clients to use different algorithms.
+    */
+
+    // Strategy instances
+    private final TokenBucketRateLimiterStrategy tokenBucketStrategy;
+    private final FixedWindowRateLimiterStrategy fixedWindowStrategy;
+    private final SlidingWindowRateLimiterStrategy slidingWindowStrategy;
+
+    /*
+        This map stores which algorithm each client should use
+
+        Key   = clientId (API key)
+        Value = algorithm name
+    */
+    private final Map<String, String> clientAlgorithms = new HashMap<>();
+
+    /*
+        This map stores the actual strategies
+
+        Key   = algorithm name
+        Value = strategy implementation
+
+        This removes the need for switch statements
+    */
+    private final Map<String, RateLimiterStrategy> strategies = new HashMap<>();
+
+    /*
+        This map stores each client's request limit / bucket size
+
+        Key   = clientId (API key)
+        Value = max allowed requests / capacity
+    */
+    private final Map<String, Integer> clientLimits = new HashMap<>();
+
+    /*
+        Default constructor (used by tests and fallback)
+    */
+    public RateLimiter() {
+        this.tokenBucketStrategy = new TokenBucketRateLimiterStrategy();
+        this.fixedWindowStrategy = new FixedWindowRateLimiterStrategy();
+        this.slidingWindowStrategy = new SlidingWindowRateLimiterStrategy();
+
+        registerStrategies();
+        registerClientPolicies();
     }
 
-
-    // HashMaps created:
-    // Store one bucket per each client
-    private Map<String, Bucket> buckets = new HashMap<>();
-
-    // Set the desired capacity of the bucket
-    private final int capacity = 5;
-
-    // Set the refill rate of bucket
-    // For example 5 tokens added every one minute
-    private final double refillRate = 5.0 / 60000.0;
-    
-
-    /* 
-        This method will be called by our API key flter later
-        It checks whether a request from a given client is allowed or not
-        I used syncronized to prevent issues if multiple requests arrive a client at the same time
-        This should stop requests incorrectly being allowed
+    /*
+        Constructor used by Spring (dependency injection)
     */
-    public synchronized boolean isRequestAllowed(String clientId){
+    public RateLimiter(TokenBucketRateLimiterStrategy tokenBucketStrategy,
+                   FixedWindowRateLimiterStrategy fixedWindowStrategy,
+                   SlidingWindowRateLimiterStrategy slidingWindowStrategy) {
 
-        // Get the current time
-        long now = System.currentTimeMillis();
+        this.tokenBucketStrategy = tokenBucketStrategy;
+        this.fixedWindowStrategy = fixedWindowStrategy;
+        this.slidingWindowStrategy = slidingWindowStrategy;
 
-        // If this is the users first rquest,
-        // Create a new bucket for them
-        // The bucket starts at full capacity
-        if(!buckets.containsKey(clientId)){
-            buckets.put(clientId, new Bucket(capacity, now));          
-        }
-
-        // Get client bucket
-        Bucket bucket = buckets.get(clientId);
-
-        // Get how much time has passed since their last refill
-        // and add the tokens back
-        long timePassed = now - bucket.lastRefillTime;
-        double tokensToAdd = timePassed * refillRate;
-
-        // refill the bucket, but make sure it does not go over the max cap
-        bucket.tokens = Math.min(capacity, bucket.tokens + tokensToAdd);
-
-        // update the refill timestamp to now
-        bucket.lastRefillTime = now;
-
-        // If the client has at least 1 token.
-        // we allow the request and consume 1 token
-        if(bucket.tokens >= 1.0){
-            bucket.tokens -= 1.0;
-            return true;
-        }
-
-        // otherwise we reject their request
-        return false;
+        registerStrategies();
+        registerClientPolicies();
     }
 
+    /*
+        Register all available rate limiting strategies
+    */
+    private void registerStrategies() {
+        strategies.put("token", tokenBucketStrategy);
+        strategies.put("fixed", fixedWindowStrategy);
+        strategies.put("sliding", slidingWindowStrategy);
+    }
 
+     /*
+        Assign algorithms and limits to clients
+    */
+    private void registerClientPolicies() {
+        // Standard clients
+        clientAlgorithms.put("dev-key-token", "token");
+        clientAlgorithms.put("dev-key-fixed", "fixed");
+        clientAlgorithms.put("dev-key-sliding", "sliding");
+
+        clientLimits.put("dev-key-token", 5);
+        clientLimits.put("dev-key-fixed", 5);
+        clientLimits.put("dev-key-sliding", 5);
+
+        // Business client
+        clientAlgorithms.put("dev-key-business", "token");
+        clientLimits.put("dev-key-business", 10);
+    }
+
+    /*
+        Called by API key filter
+
+        Determines which algorithm to use for the client
+        and delegates the request to that strategy
+    */
+    public boolean isRequestAllowed(String clientId) {
+
+        // Get algorithm for this client (default = token bucket)
+        String algo = clientAlgorithms.getOrDefault(clientId, "token");
+
+        // Get the correct strategy (fallback = token bucket)
+        RateLimiterStrategy strategy = strategies.getOrDefault(algo, tokenBucketStrategy);
+
+        // Get limit for this client (default = 5)
+        int limit = clientLimits.getOrDefault(clientId, 5);
+
+        // Delegate request
+        return strategy.isRequestAllowed(clientId, limit);
+    }
 }

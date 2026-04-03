@@ -70,7 +70,7 @@ public class AbuseFilter extends OncePerRequestFilter {
                     AbuseEvent.Type.BLOCKED_IP, clientId, ip, "Request from blocked IP");
             log.warn(event.toString());
             sendError(response, request, 403,
-                    "Forbidden", "Your IP has been blocked due to abuse.");
+                    "Forbidden", "Access denied.");
             return;
         }
 
@@ -81,7 +81,7 @@ public class AbuseFilter extends OncePerRequestFilter {
             log.warn(event.toString());
             blockedIps.block(ip);
             sendError(response, request, 429,
-                    "Too Many Requests", "Abnormal request rate detected. Your IP has been blocked.");
+                    "Too Many Requests", "Request could not be processed at thie time.");
             return;
         }
 

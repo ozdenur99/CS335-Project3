@@ -18,7 +18,7 @@ public class ApiKeyConfig {
     // Fallback keys used when application.properties is missing or api-keys is empty.
     // These are for local development only — never put real keys here.
     private static final List<String> DEFAULT_KEYS =
-        List.of("dev-key-alpha", "dev-key-beta");
+        List.of("dev-key-token", "dev-key-fixed","dev-key-sliding","dev-key-business");
 
 
     private List<String> apiKeys = new ArrayList<>(DEFAULT_KEYS);
