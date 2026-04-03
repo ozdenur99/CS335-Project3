@@ -6,12 +6,17 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/api/{guid}/notes")
 public class GatewayController {
 
-    private final String BACKEND_URL = "http://localhost:8081/api/";
+    // private final String BACKEND_URL = "http://localhost:8081/api/";
+    
+    // Docker backend url
+    @Value("${backend.url}")
+    private String BACKEND_URL;
     
     private final RestTemplate restTemplate;
     
