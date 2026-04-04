@@ -3,6 +3,10 @@ package com.CS335_Project3.api_gateway;
 import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
+import com.CS335_Project3.api_gateway.ratelimiter.RateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.TokenBucketRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.SlidingWindowRateLimiterStrategy;
 
 @Component
 public class RateLimiter {

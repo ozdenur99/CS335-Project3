@@ -1,4 +1,4 @@
-package com.CS335_Project3.api_gateway;
+package com.CS335_Project3.api_gateway.ratelimiter;
 
 import org.springframework.stereotype.Component;
 import java.util.HashMap;
