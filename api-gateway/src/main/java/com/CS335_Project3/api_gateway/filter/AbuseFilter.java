@@ -15,9 +15,11 @@ import java.io.IOException;
 import java.util.List;
 
 /**
-  * WHAT THIS RETURNS:
- *   429 spike detected
- *   403 blocked IP
+ * WHAT THIS MODULE DOES:
+ *   1. Blocks requests from known-bad IPs → 403
+ *   2. Tracks repeated 403 failures per client
+ *   3. Auto-blocks IPs that keep hitting the blocklist
+ *   4. Blocks automatically expire after a cooldown period (default 5 minutes)
  *
  * DETECTION FLOW:
  *   1. Skip /health and /metrics
@@ -32,18 +34,16 @@ import java.util.List;
 public class AbuseFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AbuseFilter.class);
-    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics");
+    private static final List<String> EXCLUDED_PATHS =
+            List.of("/health", "/metrics", "/metrics/logs");
 
-    private final Spike spike;
     private final Failure failure;
     private final BlockedIps blockedIps;
 
-    public AbuseFilter(Spike spike,
-                       Failure failure,
+    public AbuseFilter(Failure failure,
                        BlockedIps blockedIps) {
-        this.spike  = spike;
         this.failure = failure;
-        this.blockedIps = blockedIps;
+        this.blockedIps    = blockedIps;
     }
 
     @Override
@@ -65,37 +65,27 @@ public class AbuseFilter extends OncePerRequestFilter {
         String clientId = (apiKey != null && !apiKey.isBlank()) ? apiKey : ip;
 
         // Step 2: Blocked IP check
+        // isBlocked() automatically unblocks expired blocks
         if (blockedIps.isBlocked(ip)) {
             AbuseEvent event = new AbuseEvent(
-                    AbuseEvent.Type.BLOCKED_IP, clientId, ip, "Request from blocked IP");
+                    AbuseEvent.Type.BLOCKED_IP, clientId, ip,
+                    "Request from blocked IP");
             log.warn(event.toString());
-            sendError(response, request, 403,
+            sendError(response, request, HttpServletResponse.SC_FORBIDDEN,
                     "Forbidden", "Your IP has been blocked due to abuse.");
             return;
         }
 
-        // Step 3: Spike detection
-        if (spike.recordAndCheck(clientId)) {
-            AbuseEvent event = new AbuseEvent(
-                    AbuseEvent.Type.SPIKE, clientId, ip, "Request spike threshold exceeded");
-            log.warn(event.toString());
-            blockedIps.block(ip);
-            sendError(response, request, 429,
-                    "Too Many Requests", "Abnormal request rate detected. Your IP has been blocked.");
-            return;
-        }
-
-        // Step 4: Forward to backend
+        // Step 3: Forward to backend
         filterChain.doFilter(request, response);
 
-        // Step 5: Failure tracking (post-response)
+        // Step 4: Failure tracking (post-response)
         int status = response.getStatus();
-        if (status == 429 ||
-                status == 403) {
-            if (failure.recordAndCheck(clientId)) {
+        if (status == HttpServletResponse.SC_FORBIDDEN) {
+            if (failure .recordAndCheck(clientId)) {
                 AbuseEvent event = new AbuseEvent(
                         AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
-                        String.format("Repeated failures (last status: %d)", status));
+                        String.format("Repeated 403 failures (last status: %d)", status));
                 log.warn(event.toString());
                 blockedIps.block(ip);
             }
