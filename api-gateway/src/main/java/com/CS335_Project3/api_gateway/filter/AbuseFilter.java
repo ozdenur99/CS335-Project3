@@ -28,7 +28,7 @@ import java.util.List;
  *      If threshold exceeded, auto-block IP
  */
 @Component
-@Order(3)
+@Order(1)
 public class AbuseFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AbuseFilter.class);
@@ -64,10 +64,10 @@ public class AbuseFilter extends OncePerRequestFilter {
         String apiKey = request.getHeader("X-API-Key");
         String clientId = (apiKey != null && !apiKey.isBlank()) ? apiKey : ip;
 
-        // Step 2: Blocked IP check
-        if (blockedIps.isBlocked(ip)) {
+        if (blockedIps.isBlocked(clientId)) {
+            log.warn("Blocked client check triggered for {}", clientId);
             AbuseEvent event = new AbuseEvent(
-                    AbuseEvent.Type.BLOCKED_IP, clientId, ip, "Request from blocked IP");
+                    AbuseEvent.Type.BLOCKED_IP, clientId, ip, "Request from blocked client");
             log.warn(event.toString());
             sendError(response, request, 403,
                     "Forbidden", "Access denied.");
@@ -79,7 +79,19 @@ public class AbuseFilter extends OncePerRequestFilter {
             AbuseEvent event = new AbuseEvent(
                     AbuseEvent.Type.SPIKE, clientId, ip, "Request spike threshold exceeded");
             log.warn(event.toString());
-            blockedIps.block(ip);
+
+            boolean shouldBlock = failure.recordAndCheck(clientId);
+            log.warn("Spike recorded for clientId={}, ip={}, shouldBlock={}", clientId, ip, shouldBlock);
+
+            if (shouldBlock) {
+                AbuseEvent blockEvent = new AbuseEvent(
+                        AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
+                        "Repeated spike/failure threshold exceeded");
+                log.warn(blockEvent.toString());
+                blockedIps.block(clientId);
+                log.warn("Client {} added to blocklist", ip);
+            }
+
             sendError(response, request, 429,
                     "Too Many Requests", "Request could not be processed at this time.");
             return;
@@ -90,13 +102,13 @@ public class AbuseFilter extends OncePerRequestFilter {
 
         // Step 5: Failure tracking (post-response)
         int status = response.getStatus();
-        if (status == 429 || status == 403) {
+        if (status == 403) {
             if (failure.recordAndCheck(clientId)) {
                 AbuseEvent event = new AbuseEvent(
                         AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
                         String.format("Repeated failures (last status: %d)", status));
                 log.warn(event.toString());
-                blockedIps.block(ip);
+                blockedIps.block(clientId);
             }
         }
     }
