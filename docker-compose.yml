@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+
+  backend:
+    build: ./backend-service
+    ports:
+      - "8081:8081"
+    networks:
+      - cs335-net
+
+  gateway:
+    build: ./api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - BACKEND_URL=http://backend:8081/api/
+    depends_on:
+      - backend
+    networks:
+      - cs335-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - cs335-net
+
+networks:
+  cs335-net:
+    driver: bridge

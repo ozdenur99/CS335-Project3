@@ -1,2 +1,7 @@
-/mvnw text eol=lf
+# Force LF for all mvnw files anywhere in the project
+**/mvnw text eol=lf
+*.sh text eol=lf
+
+# Force CRLF for Windows-specific batch files
 *.cmd text eol=crlf
+*.bat text eol=crlf
