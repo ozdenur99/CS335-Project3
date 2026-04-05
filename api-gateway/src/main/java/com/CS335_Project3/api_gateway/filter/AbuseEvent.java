@@ -2,10 +2,6 @@ package com.CS335_Project3.api_gateway.filter;
 
 import java.time.Instant;
 
-/**
- * Represents a detected abuse event.
- * Logged at WARN level for logging and metrics layer.
- */
 public class AbuseEvent {
 
     public enum Type {
