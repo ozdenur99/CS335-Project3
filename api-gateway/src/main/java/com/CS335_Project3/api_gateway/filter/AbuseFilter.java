@@ -15,17 +15,17 @@ import java.io.IOException;
 import java.util.List;
 
 /**
-  * WHAT THIS RETURNS:
+ * WHAT THIS RETURNS:
  *   429 spike detected
  *   403 blocked IP
  *
  * DETECTION FLOW:
  *   1. Skip /health and /metrics
- *   2. Blocked IP check-- 403, stop
+ *   2. Blocked IP check -- 403, stop
  *   3. Spike detection -- 429, auto-block IP, stop
  *   4. Forward to backend
- *   5. Failure tracking ,if response was 429 or 403, record it.
- *                           If threshold exceeded auto-block IP
+ *   5. Failure tracking, if response was 429 or 403, record it.
+ *      If threshold exceeded, auto-block IP
  */
 @Component
 @Order(3)
@@ -41,7 +41,7 @@ public class AbuseFilter extends OncePerRequestFilter {
     public AbuseFilter(Spike spike,
                        Failure failure,
                        BlockedIps blockedIps) {
-        this.spike  = spike;
+        this.spike = spike;
         this.failure = failure;
         this.blockedIps = blockedIps;
     }
@@ -60,8 +60,8 @@ public class AbuseFilter extends OncePerRequestFilter {
             return;
         }
 
-        String ip       = request.getRemoteAddr();
-        String apiKey   = request.getHeader("X-API-Key");
+        String ip = request.getRemoteAddr();
+        String apiKey = request.getHeader("X-API-Key");
         String clientId = (apiKey != null && !apiKey.isBlank()) ? apiKey : ip;
 
         // Step 2: Blocked IP check
@@ -81,7 +81,7 @@ public class AbuseFilter extends OncePerRequestFilter {
             log.warn(event.toString());
             blockedIps.block(ip);
             sendError(response, request, 429,
-                    "Too Many Requests", "Request could not be processed at thie time.");
+                    "Too Many Requests", "Request could not be processed at this time.");
             return;
         }
 
@@ -90,8 +90,7 @@ public class AbuseFilter extends OncePerRequestFilter {
 
         // Step 5: Failure tracking (post-response)
         int status = response.getStatus();
-        if (status == 429 ||
-                status == 403) {
+        if (status == 429 || status == 403) {
             if (failure.recordAndCheck(clientId)) {
                 AbuseEvent event = new AbuseEvent(
                         AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
