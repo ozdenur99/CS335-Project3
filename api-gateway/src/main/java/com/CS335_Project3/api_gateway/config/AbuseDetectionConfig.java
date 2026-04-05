@@ -7,33 +7,29 @@ import org.springframework.stereotype.Component;
  * Configurable thresholds for abuse detection.
  *
  * Override defaults in application.properties:
- *   abuse.spike.maxRequestsPerWindow=100
- *   abuse.spike.windowSeconds=10
  *   abuse.failure.maxFailuresPerWindow=5
  *   abuse.failure.windowSeconds=60
- */
+ *   abuse.blockDurationSeconds=300
+ *   */
 @Component
 @ConfigurationProperties(prefix = "abuse")
 public class AbuseDetectionConfig {
 
-    private Spike spike = new Spike();
+
     private Failure failure = new Failure();
 
-    public Spike getSpike() { return spike; }
+    /** How long an IP stays blocked before being automatically unblocked (seconds). */
+    private int blockDurationSeconds = 300; // 5 minutes default
+
     public Failure getFailure() { return failure; }
 
-    public static class Spike {
-        private int maxRequestsPerWindow = 100;
-        private int windowSeconds = 10;
-
-        public int getMaxRequestsPerWindow() { return maxRequestsPerWindow; }
-        public void setMaxRequestsPerWindow(int v) { this.maxRequestsPerWindow = v; }
-        public int getWindowSeconds() { return windowSeconds; }
-        public void setWindowSeconds(int v) { this.windowSeconds = v; }
-    }
+    public int getBlockDurationSeconds() { return blockDurationSeconds; }
+    public void setBlockDurationSeconds(int v) { this.blockDurationSeconds = v; }
 
     public static class Failure {
+        /** Max 403 failures allowed in the window before auto-blocking. */
         private int maxFailuresPerWindow = 5;
+        /** Sliding window size in seconds. */
         private int windowSeconds = 60;
 
         public int getMaxFailuresPerWindow() { return maxFailuresPerWindow; }
