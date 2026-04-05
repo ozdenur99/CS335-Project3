@@ -72,7 +72,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         // Rate limiter logic
         if (!rateLimiter.isRequestAllowed(apiKey.toLowerCase())) {
             log.warn("BLOCKED reason=rate_limit_exceeded key={} path={}", apiKey, path);
-            sendError(response, request, HttpServletResponse.SC_TOO_MANY_REQUESTS,
+            sendError(response, request, 429,
                 "Too Many Requests", "Request could not be processed at this time.");
             return;
         }
