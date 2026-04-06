@@ -34,14 +34,13 @@ public class AbuseFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(AbuseFilter.class);
     private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics");
 
-    private final Spike spike;
+    // private final Spike spike;
     private final Failure failure;
     private final BlockedIps blockedIps;
 
-    public AbuseFilter(Spike spike,
-                       Failure failure,
+    public AbuseFilter(Failure failure,
                        BlockedIps blockedIps) {
-        this.spike = spike;
+        // this.spike = spike;
         this.failure = failure;
         this.blockedIps = blockedIps;
     }
@@ -75,27 +74,27 @@ public class AbuseFilter extends OncePerRequestFilter {
         }
 
         // Step 3: Spike detection
-        if (spike.recordAndCheck(clientId)) {
-            AbuseEvent event = new AbuseEvent(
-                    AbuseEvent.Type.SPIKE, clientId, ip, "Request spike threshold exceeded");
-            log.warn(event.toString());
+        // if (spike.recordAndCheck(clientId)) {
+        //     AbuseEvent event = new AbuseEvent(
+        //             AbuseEvent.Type.SPIKE, clientId, ip, "Request spike threshold exceeded");
+        //     log.warn(event.toString());
 
-            boolean shouldBlock = failure.recordAndCheck(clientId);
-            log.warn("Spike recorded for clientId={}, ip={}, shouldBlock={}", clientId, ip, shouldBlock);
+        //     boolean shouldBlock = failure.recordAndCheck(clientId);
+        //     log.warn("Spike recorded for clientId={}, ip={}, shouldBlock={}", clientId, ip, shouldBlock);
 
-            if (shouldBlock) {
-                AbuseEvent blockEvent = new AbuseEvent(
-                        AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
-                        "Repeated spike/failure threshold exceeded");
-                log.warn(blockEvent.toString());
-                blockedIps.block(clientId);
-                log.warn("Client {} added to blocklist", ip);
-            }
+        //     if (shouldBlock) {
+        //         AbuseEvent blockEvent = new AbuseEvent(
+        //                 AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
+        //                 "Repeated spike/failure threshold exceeded");
+        //         log.warn(blockEvent.toString());
+        //         blockedIps.block(clientId);
+        //         log.warn("Client {} added to blocklist", ip);
+        //     }
 
-            sendError(response, request, 429,
-                    "Too Many Requests", "Request could not be processed at this time.");
-            return;
-        }
+        //     sendError(response, request, 429,
+        //             "Too Many Requests", "Request could not be processed at this time.");
+        //     return;
+        // }
 
         // Step 4: Forward to backend
         filterChain.doFilter(request, response);
