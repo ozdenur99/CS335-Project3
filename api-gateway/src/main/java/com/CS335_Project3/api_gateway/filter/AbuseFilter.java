@@ -28,7 +28,7 @@ import java.util.List;
  *      If threshold exceeded, auto-block IP
  */
 @Component
-@Order(1)
+@Order(2)
 public class AbuseFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AbuseFilter.class);

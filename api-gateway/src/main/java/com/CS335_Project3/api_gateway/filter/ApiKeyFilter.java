@@ -17,7 +17,7 @@ import java.io.IOException;
 import java.util.List;
 
 @Component
-@Order(2)
+@Order(3)
 public class ApiKeyFilter extends OncePerRequestFilter {
 
     private static final Logger log =
