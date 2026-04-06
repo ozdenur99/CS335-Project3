@@ -1,3 +1,101 @@
+## **Date April 2nd, 2026**
+Attendees: Theo, Mateo, Ozdenur, Sean, Avneet, Vlad, and Cathy. 
+Theme: Demo and Optimization
+
+1. Overview
+This document outlines planned enhancements, priorities, and demo strategy. The focus is
+to improve realism, flexibility, and demo clarity.
+------------------------------------------------------------
+2. Core Feature Enhancements
+2.1 Multiple Rate Limiting Algorithms
+Support multiple algorithms:
+- Token Bucket (existing)
+- Fixed Window
+- Sliding Window
+Use a common interface (RateLimiterStrategy).
+Assign algorithms per client (e.g. Client A = Token Bucket, Client B = Fixed Window).
+Optional: Adaptive/expandable buckets based on previous traffic.
+2.2 Client-Aware Logging & Tracking
+Log per client:
+- API key / client ID
+- Endpoint
+- Status (200, 401, 429, 403)
+- Decision (allowed / blocked)
+- Timestamp
+Store logs in memory initially, optional file/database later.
+Allow filtering by client or status.
+Simulate multiple clients using different API keys.
+2.3 Abuse Detection Improvements
+Add:
+- Blocklist (instant block)
+- Allow list (never block certain clients)
+- Configurable thresholds (e.g. window size)
+- Escalation: repeated 429 → block → 403
+Advanced: Sync blocked clients across gateways (e.g. Redis).
+2.4 Configuration via Properties
+Move all important variables to configuration:
+- Rate limits
+- Thresholds
+- Durations
+- Window sizes
+2.5 Frontend Dashboard
+Single-page dashboard:
+- Request simulator
+- Response viewer
+- Metrics panel
+- Logs panel
+Optional: graphs for requests over time and allowed vs blocked.
+------------------------------------------------------------
+3. Optional Enhancements
+- Redis for shared state and distributed rate limiting
+- Containerisation for realistic deployment
+------------------------------------------------------------
+4. Demo Strategy
+
+4.1 Flow:
+-- 1. Normal usage → 200
+-- 2. Rate limiting → 429
+-- 3. Continued abuse → 403
+-- 4. Compare algorithms across clients
+-- 5. Show logs and metrics in real time
+
+4.2 Multiple Client Simulation
+- Use different API keys
+- Assign different algorithms and limits
+------------------------------------------------------------
+5. Presentation Plan
+Total: 10 minutes (8 + 2 Q&A)
+Suggested structure:
+- Problem (1 min)
+- Architecture (1–2 min)
+- Rate limiting (2–3 min)
+- Abuse detection (2 min)
+- Demo (2–3 min)
+Use 2 speakers for better pacing.
+------------------------------------------------------------
+6. Timeline
+Code Freeze: 30th April
+Before:
+- Multiple algorithms
+- Abuse detection complete
+- Config setup
+- Basic dashboard
+After:
+- Demo polish
+- Practice
+------------------------------------------------------------
+7. Key Engineering Principles
+- Separation of concerns
+- Configurability
+- Observability
+- Scalability (Redis, multi-gateway)
+- Algorithm trade-offs
+------------------------------------------------------------
+8. Summary
+A configurable API gateway that supports multiple rate limiting strategies, detects abuse,
+and provides real-time observability.
+
+
 
 ## **Date March 25th, 2026**
 Attendees: Theo, Mateo, Ozdenur, Sean, Avneet, Vlad, and Cathy. 

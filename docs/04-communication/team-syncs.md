@@ -1,6 +1,20 @@
 
+----------------------------------------------------------
+Team Meeting Minutes(April 1)
+Attendees: Ozdenur, Sean, Mateo, Vlad, and Cathy
+
+1. Now all MVP features have been merged. 
+2. The Client Theo mentioned is Bruno.
+If so, as I understand, it's just a testing tool. Maybe he didn't expect a real client. What we need is just to display testing results and visualize them.
+3. Might no need for everyone to demo, maybe Vlad can use postman to demo all. 
+4. For stretch features, we'll hundle for tasks right after the mentor meeting.
+
+What are curl/Bruno?
+They are manual testing tools.
+The purpose of these tools is to use the curl command line to send HTTP requests and verify whether the interface returns correct results. Bruno is similar to Postman's API testing tool; you can use Postman instead.
 
 
+----------------------------------------------------------
 Team meeting minutes(Mar 25):
 Attendees: Mateo, Ozdenur, Sean, Vlad, Cathy.
 
