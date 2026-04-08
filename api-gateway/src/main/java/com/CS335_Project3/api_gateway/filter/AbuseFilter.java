@@ -28,11 +28,13 @@ import java.util.List;
  *      If threshold exceeded, auto-block IP
  */
 @Component
-@Order(1)
+//changed to @Order(2) as it caused requests to be blocked before logging could happen
+@Order(2)//runs after LoggingFilter so blocked requests are still captured in logs
 public class AbuseFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AbuseFilter.class);
-    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics");
+    //added new excluded paths for logging testing
+    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics", "/metrics/logs", "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv", "/metrics/suspicious");
 
     // private final Spike spike;
     private final Failure failure;

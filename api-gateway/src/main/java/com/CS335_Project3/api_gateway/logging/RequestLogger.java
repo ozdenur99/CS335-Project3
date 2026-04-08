@@ -13,10 +13,10 @@ public class RequestLogger {
     //because multiple HTTP requests can arrive at the same time
     private final Queue<LogEntry> logs = new ConcurrentLinkedQueue<>();
 
-    //every request is processed and shows the 4 string fields
+    //every request is processed and shows the string fields
     //and creates a new LogEntry with the timestamp automatically set
-    public void log(String apiKey, String path, String decision, String reason) {
-        logs.add(new LogEntry(apiKey, path, decision, reason));
+    public void log(String apiKey, String ip, String path, String decision, String reason, String algorithm) {
+        logs.add(new LogEntry(apiKey, ip, path, decision, reason, algorithm));
     }
 
     //returns last 100 log entries as a List

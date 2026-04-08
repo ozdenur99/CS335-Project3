@@ -17,7 +17,8 @@ import java.io.IOException;
 import java.util.List;
 
 @Component
-@Order(2)
+//previously was Order(1) which caused 401 and 429 blocks when testing logging
+@Order(3)//runs after LoggingFilter and AbuseFilter
 public class ApiKeyFilter extends OncePerRequestFilter {
 
     private static final Logger log =
@@ -27,9 +28,10 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
     // These paths bypass API key validation.
     // /health — lets teammates check the Gateway is running without a key.
-    // /metrics — lets metrics endpoints work without a key.
+    //"/metrics" : lets metrics endpoints work without a key (allows display in http://localhost:8080/metrics).
+    //"/metrics/logs" : lets logs endpoints (/export, /suspicious, /filter...) work without a key (allows display in http://localhost:8080/metrics/logs...).
     private static final List<String> EXCLUDED_PATHS =
-        List.of("/health", "/metrics", "/metrics/logs");
+        List.of("/health", "/favicon.ico", "/metrics", "/metrics/logs", "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv", "/metrics/suspicious");
 
     private final ApiKeyConfig apiKeyConfig;
     private final RateLimiter rateLimiter;

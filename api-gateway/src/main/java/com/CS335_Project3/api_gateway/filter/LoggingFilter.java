@@ -11,20 +11,33 @@ import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
+import com.CS335_Project3.api_gateway.RateLimiter;
+import com.CS335_Project3.api_gateway.metrics.BotDetector;
+import org.springframework.web.util.ContentCachingResponseWrapper;
 
 //@Component makes it run once only, making all filters share the same log list
+//@Order(1) ensures LoggingFilter runs first and wraps the entire chain
+//so blocked requests which were not getting logged can now get logged
 @Component
 @Order(1)
 public class LoggingFilter extends OncePerRequestFilter {
 
-    //we inject RequestLogger and MetricsService so we can record what happened
+    //we inject RequestLogger, MetricsService, RateLimiter and BotDetector so we can record, measure and detect on every request
     private final RequestLogger requestLogger;
     private final MetricsService metricsService;
+    private final RateLimiter rateLimiter;
+    private final BotDetector botDetector;
 
-    public LoggingFilter(RequestLogger requestLogger, MetricsService metricsService) {
+    public LoggingFilter(RequestLogger requestLogger, MetricsService metricsService, RateLimiter rateLimiter, BotDetector botDetector) {
         this.requestLogger  = requestLogger;
         this.metricsService = metricsService;
+        this.rateLimiter    = rateLimiter;
+        this.botDetector    = botDetector;
     }
+
+    //paths excluded from logging so browser generated requests dont pollute the metrics data
+    private static final java.util.List<String> EXCLUDED_PATHS =
+            java.util.List.of("/health", "/metrics", "/metrics/logs", "/favicon.ico");
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -32,24 +45,43 @@ public class LoggingFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain chain)
             throws ServletException, IOException {
 
-        //we grab the API key and path from the request before passing it on
+        //skips logging for internal/static paths
+        if (EXCLUDED_PATHS.contains(request.getRequestURI())) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        //wrap the response so we can always read the status after the chain finishes
+        ContentCachingResponseWrapper wrappedResponse =
+                new ContentCachingResponseWrapper(response);
+
+        //grab request info
         String apiKey = request.getHeader("X-API-Key");
         String path   = request.getRequestURI();
 
-        //if no key was provided, we label it as MISSING
         if (apiKey == null || apiKey.isBlank()) {
             apiKey = "MISSING";
         }
 
-        //we pass the request through the rest of the filter chain
-        //(running ApiKeyFilter, RateLimiter, AbuseFilter, GatewayController)
-        //everything happens in this line, it returns if we know the final status
-        chain.doFilter(request, response);
+        //gets the client IP and which rate limiting algorithm they are assigned to
+        String ip        = request.getRemoteAddr();
+        String algorithm = rateLimiter.getAlgorithm(apiKey.toLowerCase());
 
-        //we read the final HTTP status code after the chain has finished
-        int status = response.getStatus();
+        //records IP for bot detection
+        botDetector.record(ip);
+        if (botDetector.isSuspicious(ip)) {
+            requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm);
+            metricsService.recordRequest(apiKey, true);
+            wrappedResponse.copyBodyToResponse();
+            return;
+        }
 
-        //we see what decision was made and why (based on status code)
+        //pass the wrapped response through the chain
+        chain.doFilter(request, wrappedResponse);
+
+        //now we can always read the real status code
+        int status = wrappedResponse.getStatus();
+
         String decision;
         String reason;
 
@@ -59,7 +91,7 @@ public class LoggingFilter extends OncePerRequestFilter {
         } else if (status == 429) {
             decision = "BLOCKED";
             reason   = "rate_limit_exceeded";
-        } else if (status == 403) { //waiting for AbuseFilter to implement
+        } else if (status == 403) {
             decision = "BLOCKED";
             reason   = "abuse_detected";
         } else {
@@ -67,11 +99,15 @@ public class LoggingFilter extends OncePerRequestFilter {
             reason   = "ok";
         }
 
-        //returns true if the request was blocked, false if it was allowed
+        //returns true if the request was blocked for any reason, false if it was allowed through
         boolean wasBlocked = decision.equals("BLOCKED");
 
-        //we then record the request in the log and update the metrics counters
-        requestLogger.log(apiKey, path, decision, reason);
+        //records the full request details in the log and update the metrics counters
+        requestLogger.log(apiKey, ip, path, decision, reason, algorithm);
         metricsService.recordRequest(apiKey, wasBlocked);
+
+        //copies the response body back so the client still receives it
+        //(ContentCachingResponseWrapper holds it in memory)
+        wrappedResponse.copyBodyToResponse();
     }
 }

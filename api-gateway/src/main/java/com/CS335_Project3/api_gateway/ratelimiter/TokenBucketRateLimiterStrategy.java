@@ -40,7 +40,9 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
     // chance of appearance of extra token i.e if the burst takes more that 2 secs
     // you get a new token available before the burst ends so it appears as if the user
     // has 6 tokens
-    private final double refillRate = 5.0 / 20000.0;
+
+    //token refill rate was slowed to 5 tokens every 120 seconds to test logging to return 429
+    private final double refillRate = 5.0 / 120000.0;
 
     /*
         Checks whether a request from a given client is allowed or not

@@ -96,13 +96,15 @@ public class RateLimiter {
         clientAlgorithms.put("dev-key-fixed", "fixed");
         clientAlgorithms.put("dev-key-sliding", "sliding");
 
-        clientLimits.put("dev-key-token", 5);
-        clientLimits.put("dev-key-fixed", 5);
-        clientLimits.put("dev-key-sliding", 5);
+        //limit lowered from 5 to 3 for testing purposes to trigger 429 without sending too many requests for logging
+        clientLimits.put("dev-key-token", 3);
+        clientLimits.put("dev-key-fixed", 3);
+        clientLimits.put("dev-key-sliding", 3);
 
         // Business client
         clientAlgorithms.put("dev-key-business", "token");
-        clientLimits.put("dev-key-business", 10);
+        //limit also lowered from 10 to 6 for testing purposes to trigger 429 without sending too many requests for logging
+        clientLimits.put("dev-key-business", 6);
     }
 
     /*
@@ -124,5 +126,11 @@ public class RateLimiter {
 
         // Delegate request
         return strategy.isRequestAllowed(clientId, limit);
+    }
+
+    //returns which rate limiting algorithm is assigned to the given client in the logs
+    //it defaults to "token" algorithm if the client is not found in the map
+    public String getAlgorithm(String clientId) {
+        return clientAlgorithms.getOrDefault(clientId, "token");
     }
 }
