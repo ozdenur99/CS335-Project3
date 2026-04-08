@@ -10,8 +10,9 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class AbuseFilterTest {
 
+class AbuseFilterTest {
+    private static final String VALID_KEY = "dev-key-token";
     private AbuseFilter filter;
     private AbuseDetectionConfig config;
     private Failure failure;
@@ -40,7 +41,7 @@ class AbuseFilterTest {
     @Test
     @DisplayName("Clean request passes through, status 200, chain not null")
     void cleanRequest_passesThrough() throws Exception {
-        MockHttpServletRequest request   = buildRequest("key-alpha", "/api/test123/notes");
+        MockHttpServletRequest request   = buildRequest(VALID_KEY, "/api/test123/notes");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain            = new MockFilterChain();
 
@@ -55,7 +56,7 @@ class AbuseFilterTest {
     void blockedIp_returns403() throws Exception {
         blockedIps.block("10.0.0.1");
 
-        MockHttpServletRequest request   = buildRequest("key-alpha", "/api/test123/notes");
+        MockHttpServletRequest request   = buildRequest(VALID_KEY, "/api/test123/notes");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain            = new MockFilterChain();
 
@@ -69,7 +70,7 @@ class AbuseFilterTest {
     @Test
     @DisplayName("429 response does NOT trigger failure tracking — that is Sean's rate limiter")
     void responseIs429_doesNotTriggerFailureTracking() throws Exception {
-        MockHttpServletRequest request   = buildRequest("key-alpha", "/api/test123/notes");
+        MockHttpServletRequest request   = buildRequest(VALID_KEY, "/api/test123/notes");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain() {
             @Override
@@ -83,7 +84,7 @@ class AbuseFilterTest {
         filter.doFilterInternal(request, response, chain);
 
         // Failure tracker should NOT have recorded anything
-        assertThat(failure.getFailureCount("key-alpha")).isEqualTo(0);
+        assertThat(failure.getFailureCount(VALID_KEY)).isEqualTo(0);
     }
 
     @Test
@@ -91,7 +92,7 @@ class AbuseFilterTest {
     void repeated403s_autoBlockIp() throws Exception {
         // Simulate 3 requests that return 403 from backend
         for (int i = 0; i < 3; i++) {
-            MockHttpServletRequest req = buildRequest("key-alpha", "/api/test123/notes");
+            MockHttpServletRequest req = buildRequest(VALID_KEY, "/api/test123/notes");
             MockHttpServletResponse res = new MockHttpServletResponse();
             MockFilterChain chain = new MockFilterChain() {
                 @Override
@@ -120,7 +121,7 @@ class AbuseFilterTest {
 
         Thread.sleep(1100); // wait for cooldown
 
-        MockHttpServletRequest request   = buildRequest("key-alpha", "/api/test123/notes");
+        MockHttpServletRequest request   = buildRequest(VALID_KEY, "/api/test123/notes");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain            = new MockFilterChain();
 
@@ -134,7 +135,7 @@ class AbuseFilterTest {
     @Test
     @DisplayName("/health path bypasses abuse detection")
     void healthPath_bypasses() throws Exception {
-        MockHttpServletRequest request   = buildRequest("key-alpha", "/health");
+        MockHttpServletRequest request   = buildRequest(VALID_KEY, "/health");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain            = new MockFilterChain();
 
@@ -147,7 +148,7 @@ class AbuseFilterTest {
     @Test
     @DisplayName("/metrics path bypasses abuse detection")
     void metricsPath_bypasses() throws Exception {
-        MockHttpServletRequest request   = buildRequest("key-alpha", "/metrics");
+        MockHttpServletRequest request   = buildRequest(VALID_KEY, "/metrics");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain            = new MockFilterChain();
 

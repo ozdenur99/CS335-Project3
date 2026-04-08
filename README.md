@@ -120,13 +120,15 @@ All requests to the gateway **must include** an `X-API-Key` header.
 ### Valid dev keys (local development only)
 | Key | Purpose |
 |-----|---------|
-| `dev-key-alpha` | Local dev / testing |
-| `dev-key-beta`  | Local dev / testing |
+| `dev-key-token` | Local dev / testing |
+| `dev-key-fixed`  | Local dev / testing |
+| `dev-key-sliding`  | Local dev / testing |
+| `dev-key-business`  | Local dev / testing |
 
 ### Example request (via curl)
 ```bash
 curl http://localhost:8080/api/test123/notes \
-  -H "X-API-Key: dev-key-alpha"
+  -H "X-API-Key: dev-key-token"
 ```
 =========================================================
 
@@ -319,7 +321,7 @@ All requests are sent via PowerShell using the following format.
 
 ### Scenario 1: Valid Request (expect 200)
 ```powershell
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-alpha"}
+curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-token"}
 ```
 Expected result: request passes through to the backend and returns an empty notes list `[]`
 <img width="1528" height="724" alt="image" src="https://github.com/user-attachments/assets/2ed13205-db76-429d-be85-24106469928a" />
@@ -372,7 +374,7 @@ After running the test scenarios, open these URLs in your browser to inspect liv
 
 **Example `/metrics` response:**
 ```json
-{"perKey":{"dev-key-beta":12,"dev-key-alpha":2,"MISSING":1},"allowedRequests":15,"blockedRequests":0,"totalRequests":15}
+{"perKey":{"dev-key-beta":12,"dev-key-token":2,"MISSING":1},"allowedRequests":15,"blockedRequests":0,"totalRequests":15}
 ```
 
 **Example `/metrics/logs` response:**
