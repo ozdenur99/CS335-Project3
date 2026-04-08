@@ -297,8 +297,225 @@ It sits at the outermost layer of the filter chain (`@Order(1)`) and wraps all r
 | `BotDetector.java` | Flags IPs that exceed the suspicious request threshold |
 
 ---
+## Logging & Metrics TEST Instructions:
 
+### Starting the Services
 
+Both services must be running simultaneously. Always start the backend first.
+
+**Start the Backend**
+```bash
+cd backend-service
+./mvnw spring-boot:run
+```
+Wait until you see:
+```
+Tomcat started on port 8081
+```
+
+**Start the API Gateway**
+```bash
+cd api-gateway
+./mvnw spring-boot:run
+```
+Wait until you see:
+```
+Tomcat started on port 8080
+```
+
+---
+
+## Valid API Keys
+
+| Key | Algorithm | Limit |
+|-----|-----------|-------|
+| `dev-key-token` | Token Bucket | 3 req/window |
+| `dev-key-fixed` | Fixed Window | 3 req/window |
+| `dev-key-sliding` | Sliding Window | 3 req/window |
+| `dev-key-business` | Token Bucket | 10 req/window |
+
+> **Note:** Limits are temporarily set to 3 for testing. Will be restored to 5 before final submission.
+
+---
+
+## Sending Test Requests
+
+### PowerShell
+
+If PowerShell shows a security warning, press **A (Yes to All)** to continue.
+
+**Valid Request (expect 200)**
+```powershell
+curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-token"}
+```
+Expected result: request passes through to the backend and returns `[]`
+
+---
+
+**Invalid API Key (expect 401)**
+```powershell
+curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="bad-key"}
+```
+Expected result:
+```json
+{"status":401,"error":"Unauthorized","message":"Request could not be authorised.","path":"/api/test123/notes"}
+```
+
+---
+
+**Burst Requests to Trigger Rate Limit (expect 429 after 3rd request)**
+```powershell
+1..8 | ForEach-Object {
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-fixed"}
+        Write-Host "Request $_`: $($r.StatusCode)"
+    } catch {
+        $code = $_.Exception.Response.StatusCode.value__
+        Write-Host "Request $_`: $code"
+    }
+}
+```
+Expected result: first 3 requests return 200, remaining return 429.
+
+---
+
+**Abuse Detection (expect 403)**
+```powershell
+1..12 | ForEach-Object {
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:8080/api/test/notes" -Headers @{"X-API-Key"="dev-key-sliding"}
+        Write-Host "Request $_`: $($r.StatusCode)"
+    } catch {
+        $code = $_.Exception.Response.StatusCode.value__
+        Write-Host "Request $_`: $code"
+    }
+}
+```
+Expected result: returns 403 around request 12 once the abuse detection threshold is hit.
+
+---
+
+**Bot Detection (expect IP flagged after 50+ requests)**
+```powershell
+1..55 | ForEach-Object {
+    try {
+        Invoke-WebRequest -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-token"} | Out-Null
+    } catch {}
+    Write-Host "Request $_"
+}
+```
+Then check `http://localhost:8080/metrics/suspicious` (should show bot IP)
+
+---
+
+### IntelliJ Terminal
+
+The same PowerShell commands above work in the IntelliJ terminal. Open it via the **Terminal** tab at the bottom of IntelliJ and run the commands directly.
+
+Alternatively use curl on Mac or Linux:
+```bash
+curl http://localhost:8080/api/test123/notes -H "X-API-Key: dev-key-token"
+```
+
+---
+
+### Postman (VS Code)
+
+1. Open Postman and create a new request
+2. Set the method to **GET**
+3. Set the URL to `http://localhost:8080/api/test123/notes`
+4. Go to the **Headers** tab and add:
+   - Key: `X-API-Key`
+   - Value: `dev-key-token`
+5. Click **Send**
+
+To test different scenarios change the key value:
+- Valid: `dev-key-token`, `dev-key-fixed`, `dev-key-sliding`, `dev-key-business`
+- Invalid: any other value e.g. `bad-key`
+
+To trigger the rate limit click Send rapidly more than 3 times with the same key.
+
+---
+
+## 4. Checking Metrics and Logs
+
+All endpoints below require no API key.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /metrics` | Live count of total, blocked, allowed, and per-key requests |
+| `GET /metrics/logs` | Last 100 requests with full details including IP and algorithm |
+| `GET /metrics/logs/filter` | Filter logs by decision, reason, apiKey, or algorithm |
+| `GET /metrics/logs/export/json` | Download all logs as a JSON file |
+| `GET /metrics/logs/export/csv` | Download all logs as a CSV file |
+| `GET /metrics/suspicious` | List of IPs flagged as potential bots |
+
+### Example `/metrics` response
+```json
+{
+  "totalRequests": 8,
+  "blockedRequests": 2,
+  "allowedRequests": 6,
+  "perKey": {
+    "dev-key-token": 3,
+    "dev-key-fixed": 4,
+    "MISSING": 1
+  }
+}
+```
+
+### Example `/metrics/logs` response
+```json
+[
+  {
+    "timestamp": "2026-04-07T14:02:11",
+    "apiKey": "dev-key-token",
+    "ip": "127.0.0.1",
+    "path": "/api/test123/notes",
+    "decision": "ALLOWED",
+    "reason": "ok",
+    "algorithm": "token"
+  },
+  {
+    "timestamp": "2026-04-07T14:02:12",
+    "apiKey": "MISSING",
+    "ip": "127.0.0.1",
+    "path": "/api/test123/notes",
+    "decision": "BLOCKED",
+    "reason": "invalid_or_missing_key",
+    "algorithm": "token"
+  }
+]
+```
+
+### Checking logs & metrics
+```
+http://localhost:8080/metrics
+http://localhost:8080/metrics/logs
+```
+To check any suspicious bot IPs
+```
+http://localhost:8080/metrics/suspicious
+```
+
+### Filtering logs
+Check which requests were BLOCKED, ALLOWED, for what reason where they allowed or blocked, what type of dev-key was used, what type of rate-limitng algorithm was used
+
+```
+http://localhost:8080/metrics/logs/filter?decision=BLOCKED
+http://localhost:8080/metrics/logs/filter?decision=ALLOWED
+http://localhost:8080/metrics/logs/filter?reason=ok
+http://localhost:8080/metrics/logs/filter?reason=rate_limit_exceeded
+http://localhost:8080/metrics/logs/filter?reason=invalid_or_missing_key
+http://localhost:8080/metrics/logs/filter?reason=abuse_detected
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-token
+http://localhost:8080/metrics/logs/filter?algorithm=fixed
+```
+
+Multiple filters can be combined:
+```
+http://localhost:8080/metrics/logs/filter?decision=BLOCKED&algorithm=token
+```
 
 ---
 
