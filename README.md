@@ -279,112 +279,42 @@ HOW IT WORKS
 ## Logging & Metrics
 > Added by Mateo
 
-It records every request passing through the gateway and tracks whether it was allowed or blocked, to check the live results view `/metrics` or `/metrics/logs/` for the last 100 requests
+It Records every request passing through the gateway and tracks whether it was allowed or blocked. Results are viewable at `/metrics` for live counts and `/metrics/logs` for the last 100 requests
 
-## 1. Testing the API Gateway
-
-To test the gateway, both the backend and gateway must be running simultaneously.
-Always start the backend first on port 8081 and then the gateway on port 8080. 
-
-**Terminal 1: Start the Backend**
-```bash
-cd backend-service
-./mvnw spring-boot:run
-```
-Wait until you see:
-```
-Tomcat started on port 8081
-```
-<img width="919" height="203" alt="image" src="https://github.com/user-attachments/assets/b7eba510-0a9b-4be1-a475-a0e9d340d5e9" />
-
-**Terminal 2: Start the API Gateway**
-```bash
-cd api-gateway
-./mvnw spring-boot:run
-```
-Wait until you see:
-```
-Tomcat started on port 8080
-```
-<img width="922" height="199" alt="image" src="https://github.com/user-attachments/assets/c69003c0-7a04-4171-a297-fcd83e709104" />
+It sits at the outermost layer of the filter chain (`@Order(1)`) and wraps all requests that come through the gateway. It captures: timestamp, API key, client IP, path, decision (ALLOWED/BLOCKED), reason, and which rate limiting algorithm was used. It also includes bot detection which automatically flags IPs that exceed 50 requests (number of requests can be changed)
 
 ---
 
-## 2. Sending Test Requests (PowerShell)
 
-All requests are sent via PowerShell using the following format.
-> If PowerShell shows a security warning, press **A (Yes to All)** to continue.
-
----
-
-### Scenario 1: Valid Request (expect 200)
-```powershell
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-alpha"}
-```
-Expected result: request passes through to the backend and returns an empty notes list `[]`
-<img width="1528" height="724" alt="image" src="https://github.com/user-attachments/assets/2ed13205-db76-429d-be85-24106469928a" />
+### Files
+| File | Description |
+|------|-------------|
+| `LogEntry.java` | Data model for a single request log record |
+| `RequestLogger.java` | Thread-safe queue that stores up to 100 log entries |
+| `MetricsService.java` | Tracks total, blocked, and per-key request counts |
+| `MetricsController.java` | REST endpoints to expose metrics, logs, filters, and exports |
+| `LoggingFilter.java` | Filter chain wrapper that records every request outcome |
+| `BotDetector.java` | Flags IPs that exceed the suspicious request threshold |
 
 ---
 
-### Scenario 2: Invalid API Key (expect 401)
-```powershell
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="bad-key"}
-```
-Expected result:
-```json
-{"status":401,"error":"Unauthorized","message":"Invalid API key","path":"/api/test123/notes"}
-```
-<img width="1488" height="165" alt="image" src="https://github.com/user-attachments/assets/eda65f58-eb0d-4a0d-bd77-b9ca062f9f0c" />
+
 
 ---
 
-### Scenario 3: Burst Requests to Trigger Rate Limit (expect 429 on 6th request)
+## 5. Exporting Logs
 
-Run the same command several times in a row:
-```powershell
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
 ```
-The first 5 requests behave the same as Scenario 1 and return 200.
-The 6th request hits the rate limit and returns:
-<img width="1809" height="756" alt="image" src="https://github.com/user-attachments/assets/867ee362-897c-4a21-8fa3-8f0403e90f2a" />
+http://localhost:8080/metrics/logs/export/json
+```
+Downloads a `logs.json` file with all current log entries.
 
-```json
-{"status":429,"error":"Too Many Requests","message":"Rate limit exceeded","path":"/api/test123/notes"}
 ```
+http://localhost:8080/metrics/logs/export/csv
+```
+Downloads a `logs.csv` file that can be opened in Excel or any spreadsheet app.
 
 ---
-
-## 3. Checking Metrics and Logs
-
-After running the test scenarios, open these URLs in your browser to inspect live data:
-
-| Endpoint | Description |
-|----------|-------------|
-| `http://localhost:8080/metrics` | Shows total, blocked, allowed, and per-key request counts |
-| `http://localhost:8080/metrics/logs` | Shows the last 100 requests with their decision and reason |
-
-> No API key is required for either of these endpoints.
-
-**Example `/metrics` response:**
-```json
-{"perKey":{"dev-key-beta":12,"dev-key-alpha":2,"MISSING":1},"allowedRequests":15,"blockedRequests":0,"totalRequests":15}
-```
-
-**Example `/metrics/logs` response:**
-```json
-{
-    "apiKey": "dev-key-beta",
-    "path": "/api/test123/notes",
-    "decision": "ALLOWED",
-    "reason": "ok",
-    "timeStamp": "2026-03-24T14:54:34.788634"
-  },
-```
 
 > Brief Overview
 --------------------------------------------------
