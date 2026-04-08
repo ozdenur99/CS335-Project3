@@ -3,10 +3,18 @@ package com.CS335_Project3.api_gateway;
 import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
+import com.CS335_Project3.api_gateway.config.TenantRateLimitConfig;
 import com.CS335_Project3.api_gateway.ratelimiter.RateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.TokenBucketRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.SlidingWindowRateLimiterStrategy;
+import org.springframework.beans.factory.annotation.Autowired;
+
+/**
+ * Main entry point for rate limiting logic.
+ * Manages multiple strategies and resolves 
+ * hierarchical policies (App > Tenant > Global).
+ */
 
 @Component
 public class RateLimiter {
@@ -25,6 +33,12 @@ public class RateLimiter {
     private final FixedWindowRateLimiterStrategy fixedWindowStrategy;
     private final SlidingWindowRateLimiterStrategy slidingWindowStrategy;
 
+    // 2a. Add config for hierarchical policies
+    private final TenantRateLimitConfig tenantRateLimitConfig;
+
+     /*
+        Constructor with dependency injection for strategies and config
+    */
     /*
         This map stores which algorithm each client should use
 
@@ -52,27 +66,36 @@ public class RateLimiter {
     private final Map<String, Integer> clientLimits = new HashMap<>();
 
     /*
-        Default constructor (used by tests and fallback)
+        2b. Default constructor (used by tests and fallback)
+        Sets tenantConfig to null; the logic safely handles this via null-checks.
     */
     public RateLimiter() {
         this.tokenBucketStrategy = new TokenBucketRateLimiterStrategy();
         this.fixedWindowStrategy = new FixedWindowRateLimiterStrategy();
         this.slidingWindowStrategy = new SlidingWindowRateLimiterStrategy();
+        this.tenantRateLimitConfig = null; // No config, will use defaults
 
         registerStrategies();
         registerClientPolicies();
     }
 
     /*
-        Constructor used by Spring (dependency injection)
+       2b. Primary constructor used by Spring (dependency injection)
+       @Autowired forces Spring to use the 4-arg constructor.
+       This ensures 'tenantRateLimitConfig' is properly injected from application.properties,
+       enabling hierarchical policy resolution (App > Tenant > Global).
+       Note: The no-arg constructor is preserved solely for Unit Tests.
     */
+    @Autowired
     public RateLimiter(TokenBucketRateLimiterStrategy tokenBucketStrategy,
                    FixedWindowRateLimiterStrategy fixedWindowStrategy,
-                   SlidingWindowRateLimiterStrategy slidingWindowStrategy) {
+                   SlidingWindowRateLimiterStrategy slidingWindowStrategy,
+                   TenantRateLimitConfig tenantRateLimitConfig) {
 
         this.tokenBucketStrategy = tokenBucketStrategy;
         this.fixedWindowStrategy = fixedWindowStrategy;
         this.slidingWindowStrategy = slidingWindowStrategy;
+        this.tenantRateLimitConfig = tenantRateLimitConfig;
 
         registerStrategies();
         registerClientPolicies();
@@ -132,5 +155,59 @@ public class RateLimiter {
     //it defaults to "token" algorithm if the client is not found in the map
     public String getAlgorithm(String clientId) {
         return clientAlgorithms.getOrDefault(clientId, "token");
+    }    
+    /**
+     * [2c] New Overloaded method for Hierarchical Scoping.
+     * Resolves limits in order: App > Tenant > Global Default.
+     */
+    public boolean isRequestAllowed(String clientId, String tenantId, String appId) {
+        // Safe access to configuration
+        TenantRateLimitConfig cfg = this.tenantRateLimitConfig;
+        
+        // 1. Resolve Tenant Policy
+        TenantRateLimitConfig.TenantPolicy tenantPolicy = (cfg != null && tenantId != null) 
+            ? cfg.getTenants().get(tenantId) : null;
+
+        // 2. Bypass check: If tenant exists but is disabled, allow all traffic
+        if (tenantPolicy != null && !tenantPolicy.isEnabled()) {
+            return true;
+        }
+
+        // 3. Resolve App Policy
+        TenantRateLimitConfig.AppPolicy appPolicy = (tenantPolicy != null && appId != null) 
+            ? tenantPolicy.getApps().get(appId) : null;
+
+        // 4. Resolve Limit (Highest specificity wins: App > Tenant > Client/Global)
+        int resolvedLimit;
+        if (appPolicy != null && appPolicy.isEnabled()) {
+            resolvedLimit = appPolicy.getLimit();
+        } else if (tenantPolicy != null) {
+            resolvedLimit = tenantPolicy.getLimit();
+        } else {
+            resolvedLimit = clientLimits.getOrDefault(clientId, (cfg != null) ? cfg.getDefaultLimit() : 5);
+        }
+
+        // 5. Resolve Algorithm
+        String algoName;
+        if (tenantPolicy != null && tenantPolicy.getAlgorithm() != null) {
+            algoName = tenantPolicy.getAlgorithm();
+        } else {
+            algoName = clientAlgorithms.getOrDefault(clientId, (cfg != null) ? cfg.getDefaultAlgorithm() : "token");
+        }
+
+        // 6. Strategy selection
+        RateLimiterStrategy strategy = strategies.getOrDefault(algoName, tokenBucketStrategy);
+
+        /**
+         * 7. Composite Key Strategy:
+         * We create a unique key representing the specific bucket.
+         * Example: "tenant-acme/dashboard"
+         * This allows existing strategies to isolate state without code changes.
+         */
+        String bucketKey = (tenantId != null && appId != null) 
+            ? tenantId + "/" + appId 
+            : clientId;
+
+        return strategy.isRequestAllowed(bucketKey, resolvedLimit);
     }
 }

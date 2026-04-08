@@ -26,7 +26,13 @@ class ApiKeyFilterTest {
     @BeforeEach
     void setUp() {
         ApiKeyConfig config = new ApiKeyConfig();
-        config.setApiKeys(List.of("key-alpha", "key-beta"));
+        // Update to match actual keys used in application.properties
+        config.setApiKeys(List.of(
+            "dev-key-token",    // Token Bucket Algorithm, Limit: 5
+            "dev-key-fixed",    // Fixed Window Algorithm, Limit: 5
+            "dev-key-sliding",  // Sliding Window Algorithm, Limit: 5
+            "dev-key-business"  // Token Bucket Algorithm, Limit: 10
+        ));
         filter = new ApiKeyFilter(config, new RateLimiter());
     }
 
@@ -34,20 +40,20 @@ class ApiKeyFilterTest {
     @Test
     void validKey_shouldPassThrough() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-API-Key", "key-alpha");
+        // To test selective multi-rate limit algorithm,
+        // change this line to use one of the valid keys as below 
+        // dev-key-token, dev-key-token, dev-key-sliding, or dev-key-business
+        request.addHeader("X-API-Key", "dev-key-token");
         request.setRequestURI("/api/test123/notes");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
-
         filter.doFilterInternal(request, response, chain);
-
 
         // chain.getRequest() is non-null only if doFilter was called
         assertThat(chain.getRequest()).isNotNull();
         assertThat(response.getStatus()).isEqualTo(200);
     }
-
 
     @Test
     void missingKey_shouldReturn401() throws ServletException, IOException {
@@ -56,16 +62,13 @@ class ApiKeyFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
-
         filter.doFilterInternal(request, response, chain);
-
 
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(chain.getRequest()).isNull();  // chain was NOT called
         assertThat(response.getContentAsString())
             .contains("Missing X-API-Key header");
     }
-
 
     @Test
     void invalidKey_shouldReturn401() throws ServletException, IOException {
@@ -75,16 +78,13 @@ class ApiKeyFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
-
         filter.doFilterInternal(request, response, chain);
-
 
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(chain.getRequest()).isNull();
         assertThat(response.getContentAsString())
             .contains("Invalid API key");
     }
-
 
     @Test
     void healthPath_shouldSkipValidation() throws ServletException, IOException {
@@ -94,32 +94,26 @@ class ApiKeyFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
-
         filter.doFilterInternal(request, response, chain);
-
 
         assertThat(chain.getRequest()).isNotNull();
         assertThat(response.getStatus()).isEqualTo(200);
     }
 
-
     @Test
     void keyMatchingIsCaseInsensitive() throws ServletException, IOException {
-        // key-alpha is stored lowercase, client sends uppercase — should still pass
+        // DEV-KEY-TOKEN is stored lowercase, client sends uppercase should still pass
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("X-API-Key", "KEY-ALPHA");
+        request.addHeader("X-API-Key", "DEV-KEY-TOKEN");
         request.setRequestURI("/api/test123/notes");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
-
         filter.doFilterInternal(request, response, chain);
-
 
         assertThat(chain.getRequest()).isNotNull();
         assertThat(response.getStatus()).isEqualTo(200);
     }
-
 
     @Test
     void responseBody_containsExpectedFields() throws ServletException, IOException {
@@ -128,9 +122,7 @@ class ApiKeyFilterTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
-
         filter.doFilterInternal(request, response, chain);
-
 
         String body = response.getContentAsString();
         assertThat(body).contains("\"status\":401");
@@ -142,7 +134,7 @@ class ApiKeyFilterTest {
     void sixthRequest_shouldReturn429() throws ServletException, IOException {
         for (int i = 1; i <= 5; i++) {
             MockHttpServletRequest request = new MockHttpServletRequest();
-            request.addHeader("X-API-Key", "key-alpha");
+            request.addHeader("X-API-Key", "dev-key-token");
             request.setRequestURI("/api/test123/notes");
             MockHttpServletResponse response = new MockHttpServletResponse();
             MockFilterChain chain = new MockFilterChain();
@@ -154,7 +146,9 @@ class ApiKeyFilterTest {
     }
 
     MockHttpServletRequest request6 = new MockHttpServletRequest();
-    request6.addHeader("X-API-Key", "key-alpha");
+    // To test selective multi-rate limit algorithm,
+    // use one of the valid keys
+    request6.addHeader("X-API-Key", "dev-key-token");
     request6.setRequestURI("/api/test123/notes");
     MockHttpServletResponse response6 = new MockHttpServletResponse();
     MockFilterChain chain6 = new MockFilterChain();

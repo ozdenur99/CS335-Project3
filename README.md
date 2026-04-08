@@ -120,13 +120,15 @@ All requests to the gateway **must include** an `X-API-Key` header.
 ### Valid dev keys (local development only)
 | Key | Purpose |
 |-----|---------|
-| `dev-key-alpha` | Local dev / testing |
-| `dev-key-beta`  | Local dev / testing |
+| `dev-key-token` | Local dev / testing |
+| `dev-key-fixed`  | Local dev / testing |
+| `dev-key-sliding`  | Local dev / testing |
+| `dev-key-business`  | Local dev / testing |
 
 ### Example request (via curl)
 ```bash
 curl http://localhost:8080/api/test123/notes \
-  -H "X-API-Key: dev-key-alpha"
+  -H "X-API-Key: dev-key-token"
 ```
 =========================================================
 

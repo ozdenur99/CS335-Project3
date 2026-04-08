@@ -40,7 +40,8 @@ class GatewayControllerTest {
         )).thenReturn(mockResponse);
 
         mockMvc.perform(get("/api/" + guid + "/notes")
-            .header("X-API-Key", "dev-key-alpha"))
+            // Use dev-key-token to test Token Bucket Algorithm (Standard Limit: 5)
+            .header("X-API-Key", "dev-key-token"))
             .andExpect(status().isOk())
             .andExpect(content().string(mockResponse));
     }
@@ -74,7 +75,8 @@ class GatewayControllerTest {
         String noteId = "note-1";
 
         mockMvc.perform(put("/api/" + guid + "/notes/" + noteId)
-            .header("X-API-Key", "dev-key-alpha")
+            // Use dev-key-fixed to test Fixed Window (Limit: 10)
+            .header("X-API-Key", "dev-key-fixed")
             .contentType("application/json")
             .content("{\"content\":\"Updated Note\"}"))
             .andExpect(status().isOk())
@@ -83,11 +85,12 @@ class GatewayControllerTest {
 
     @Test
     void deleteNote_withValidKey_shouldForwardToBackend() throws Exception {
-        String guid = "test-guid-123";
+        String guid = "test-guid-123"; 
         String noteId = "note-1";
 
         mockMvc.perform(delete("/api/" + guid + "/notes/" + noteId)
-            .header("X-API-Key", "dev-key-beta"))
+            // Use dev-key-business to test Business limits (10) 
+            .header("X-API-Key", "dev-key-business"))
             .andExpect(status().isOk())
             .andExpect(content().string("Deleted"));
     }
