@@ -511,6 +511,9 @@ http://localhost:8080/metrics/logs/filter?reason=rate_limit_exceeded
 http://localhost:8080/metrics/logs/filter?reason=invalid_or_missing_key
 http://localhost:8080/metrics/logs/filter?reason=abuse_detected
 http://localhost:8080/metrics/logs/filter?apiKey=dev-key-token
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-business
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-fixed
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-sliding
 http://localhost:8080/metrics/logs/filter?algorithm=fixed
 ```
 
