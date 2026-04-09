@@ -506,15 +506,21 @@ Check which requests were BLOCKED, ALLOWED, for what reason where they allowed o
 ```
 http://localhost:8080/metrics/logs/filter?decision=BLOCKED
 http://localhost:8080/metrics/logs/filter?decision=ALLOWED
+
 http://localhost:8080/metrics/logs/filter?reason=ok
 http://localhost:8080/metrics/logs/filter?reason=rate_limit_exceeded
 http://localhost:8080/metrics/logs/filter?reason=invalid_or_missing_key
 http://localhost:8080/metrics/logs/filter?reason=abuse_detected
+
 http://localhost:8080/metrics/logs/filter?apiKey=dev-key-token
 http://localhost:8080/metrics/logs/filter?apiKey=dev-key-business
 http://localhost:8080/metrics/logs/filter?apiKey=dev-key-fixed
 http://localhost:8080/metrics/logs/filter?apiKey=dev-key-sliding
+
+http://localhost:8080/metrics/logs/filter?algorithm=token
+http://localhost:8080/metrics/logs/filter?algorithm=business
 http://localhost:8080/metrics/logs/filter?algorithm=fixed
+http://localhost:8080/metrics/logs/filter?algorithm=sliding
 ```
 
 Multiple filters can be combined:
