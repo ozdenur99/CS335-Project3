@@ -50,6 +50,12 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Jackson JavaTimeModule for JSON serialization of LocalDateTime in log exports -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

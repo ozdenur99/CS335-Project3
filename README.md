@@ -1,7 +1,7 @@
 # CS335 Microsoft Project 3:
 ## Rate Limiting and Abuse Detection API Gateway
 
-> NOT FINAL / TO BE UPDATED (last update: Mar 24th 2026)
+> NOT FINAL / TO BE UPDATED (last update: April 9th 2026)
 
 ---
 
@@ -281,14 +281,31 @@ HOW IT WORKS
 ## Logging & Metrics
 > Added by Mateo
 
-It records every request passing through the gateway and tracks whether it was allowed or blocked, to check the live results view `/metrics` or `/metrics/logs/` for the last 100 requests
+It Records every request passing through the gateway and tracks whether it was allowed or blocked. Results are viewable at `/metrics` for live counts and `/metrics/logs` for the last 100 requests
 
-## 1. Testing the API Gateway
+It sits at the outermost layer of the filter chain (`@Order(1)`) and wraps all requests that come through the gateway. It captures: timestamp, API key, client IP, path, decision (ALLOWED/BLOCKED), reason, and which rate limiting algorithm was used. It also includes bot detection which automatically flags IPs that exceed 50 requests (number of requests can be changed)
 
-To test the gateway, both the backend and gateway must be running simultaneously.
-Always start the backend first on port 8081 and then the gateway on port 8080. 
+---
 
-**Terminal 1: Start the Backend**
+
+### Files
+| File | Description |
+|------|-------------|
+| `LogEntry.java` | Data model for a single request log record |
+| `RequestLogger.java` | Thread-safe queue that stores up to 100 log entries |
+| `MetricsService.java` | Tracks total, blocked, and per-key request counts |
+| `MetricsController.java` | REST endpoints to expose metrics, logs, filters, and exports |
+| `LoggingFilter.java` | Filter chain wrapper that records every request outcome |
+| `BotDetector.java` | Flags IPs that exceed the suspicious request threshold |
+
+---
+## Logging & Metrics TEST Instructions:
+
+### Starting the Services
+
+Both services must be running simultaneously. Always start the backend first.
+
+**Start the Backend**
 ```bash
 cd backend-service
 ./mvnw spring-boot:run
@@ -297,9 +314,8 @@ Wait until you see:
 ```
 Tomcat started on port 8081
 ```
-<img width="919" height="203" alt="image" src="https://github.com/user-attachments/assets/b7eba510-0a9b-4be1-a475-a0e9d340d5e9" />
 
-**Terminal 2: Start the API Gateway**
+**Start the API Gateway**
 ```bash
 cd api-gateway
 ./mvnw spring-boot:run
@@ -308,85 +324,225 @@ Wait until you see:
 ```
 Tomcat started on port 8080
 ```
-<img width="922" height="199" alt="image" src="https://github.com/user-attachments/assets/c69003c0-7a04-4171-a297-fcd83e709104" />
 
 ---
 
-## 2. Sending Test Requests (PowerShell)
+## Valid API Keys
 
-All requests are sent via PowerShell using the following format.
-> If PowerShell shows a security warning, press **A (Yes to All)** to continue.
+| Key | Algorithm | Limit |
+|-----|-----------|-------|
+| `dev-key-token` | Token Bucket | 3 req/window |
+| `dev-key-fixed` | Fixed Window | 3 req/window |
+| `dev-key-sliding` | Sliding Window | 3 req/window |
+| `dev-key-business` | Token Bucket | 10 req/window |
+
+> **Note:** Limits are temporarily set to 3 for testing. Will be restored to 5 before final submission.
 
 ---
 
-### Scenario 1: Valid Request (expect 200)
+## Sending Test Requests
+
+### PowerShell
+
+If PowerShell shows a security warning, press **A (Yes to All)** to continue.
+
+**Valid Request (expect 200)**
 ```powershell
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-token"}
+curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-token"}
 ```
-Expected result: request passes through to the backend and returns an empty notes list `[]`
-<img width="1528" height="724" alt="image" src="https://github.com/user-attachments/assets/2ed13205-db76-429d-be85-24106469928a" />
+Expected result: request passes through to the backend and returns `[]`
 
 ---
 
-### Scenario 2: Invalid API Key (expect 401)
+**Invalid API Key (expect 401)**
 ```powershell
 curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="bad-key"}
 ```
 Expected result:
 ```json
-{"status":401,"error":"Unauthorized","message":"Invalid API key","path":"/api/test123/notes"}
+{"status":401,"error":"Unauthorized","message":"Request could not be authorised.","path":"/api/test123/notes"}
 ```
-<img width="1488" height="165" alt="image" src="https://github.com/user-attachments/assets/eda65f58-eb0d-4a0d-bd77-b9ca062f9f0c" />
 
 ---
 
-### Scenario 3: Burst Requests to Trigger Rate Limit (expect 429 on 6th request)
-
-Run the same command several times in a row:
+**Burst Requests to Trigger Rate Limit (expect 429 after 3rd request)**
 ```powershell
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
-curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-beta"}
+1..8 | ForEach-Object {
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-fixed"}
+        Write-Host "Request $_`: $($r.StatusCode)"
+    } catch {
+        $code = $_.Exception.Response.StatusCode.value__
+        Write-Host "Request $_`: $code"
+    }
+}
 ```
-The first 5 requests behave the same as Scenario 1 and return 200.
-The 6th request hits the rate limit and returns:
-<img width="1809" height="756" alt="image" src="https://github.com/user-attachments/assets/867ee362-897c-4a21-8fa3-8f0403e90f2a" />
+Expected result: first 3 requests return 200, remaining return 429.
 
-```json
-{"status":429,"error":"Too Many Requests","message":"Rate limit exceeded","path":"/api/test123/notes"}
+---
+
+**Abuse Detection (expect 403)**
+```powershell
+1..12 | ForEach-Object {
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:8080/api/test/notes" -Headers @{"X-API-Key"="dev-key-sliding"}
+        Write-Host "Request $_`: $($r.StatusCode)"
+    } catch {
+        $code = $_.Exception.Response.StatusCode.value__
+        Write-Host "Request $_`: $code"
+    }
+}
+```
+Expected result: returns 403 around request 12 once the abuse detection threshold is hit.
+
+---
+
+**Bot Detection (expect IP flagged after 50+ requests)**
+```powershell
+1..55 | ForEach-Object {
+    try {
+        Invoke-WebRequest -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-token"} | Out-Null
+    } catch {}
+    Write-Host "Request $_"
+}
+```
+Then check `http://localhost:8080/metrics/suspicious` (should show bot IP)
+
+---
+
+### IntelliJ Terminal
+
+The same PowerShell commands above work in the IntelliJ terminal. Open it via the **Terminal** tab at the bottom of IntelliJ and run the commands directly.
+
+Alternatively use curl on Mac or Linux:
+```bash
+curl http://localhost:8080/api/test123/notes -H "X-API-Key: dev-key-token"
 ```
 
 ---
 
-## 3. Checking Metrics and Logs
+### Postman (VS Code)
 
-After running the test scenarios, open these URLs in your browser to inspect live data:
+1. Open Postman and create a new request
+2. Set the method to **GET**
+3. Set the URL to `http://localhost:8080/api/test123/notes`
+4. Go to the **Headers** tab and add:
+   - Key: `X-API-Key`
+   - Value: `dev-key-token`
+5. Click **Send**
+
+To test different scenarios change the key value:
+- Valid: `dev-key-token`, `dev-key-fixed`, `dev-key-sliding`, `dev-key-business`
+- Invalid: any other value e.g. `bad-key`
+
+To trigger the rate limit click Send rapidly more than 3 times with the same key.
+
+---
+
+## 4. Checking Metrics and Logs
+
+All endpoints below require no API key.
 
 | Endpoint | Description |
 |----------|-------------|
-| `http://localhost:8080/metrics` | Shows total, blocked, allowed, and per-key request counts |
-| `http://localhost:8080/metrics/logs` | Shows the last 100 requests with their decision and reason |
+| `GET /metrics` | Live count of total, blocked, allowed, and per-key requests |
+| `GET /metrics/logs` | Last 100 requests with full details including IP and algorithm |
+| `GET /metrics/logs/filter` | Filter logs by decision, reason, apiKey, or algorithm |
+| `GET /metrics/logs/export/json` | Download all logs as a JSON file |
+| `GET /metrics/logs/export/csv` | Download all logs as a CSV file |
+| `GET /metrics/suspicious` | List of IPs flagged as potential bots |
 
-> No API key is required for either of these endpoints.
-
-**Example `/metrics` response:**
-```json
-{"perKey":{"dev-key-beta":12,"dev-key-token":2,"MISSING":1},"allowedRequests":15,"blockedRequests":0,"totalRequests":15}
-```
-
-**Example `/metrics/logs` response:**
+### Example `/metrics` response
 ```json
 {
-    "apiKey": "dev-key-beta",
+  "totalRequests": 8,
+  "blockedRequests": 2,
+  "allowedRequests": 6,
+  "perKey": {
+    "dev-key-token": 3,
+    "dev-key-fixed": 4,
+    "MISSING": 1
+  }
+}
+```
+
+### Example `/metrics/logs` response
+```json
+[
+  {
+    "timestamp": "2026-04-07T14:02:11",
+    "apiKey": "dev-key-token",
+    "ip": "127.0.0.1",
     "path": "/api/test123/notes",
     "decision": "ALLOWED",
     "reason": "ok",
-    "timeStamp": "2026-03-24T14:54:34.788634"
+    "algorithm": "token"
   },
+  {
+    "timestamp": "2026-04-07T14:02:12",
+    "apiKey": "MISSING",
+    "ip": "127.0.0.1",
+    "path": "/api/test123/notes",
+    "decision": "BLOCKED",
+    "reason": "invalid_or_missing_key",
+    "algorithm": "token"
+  }
+]
 ```
+
+### Checking logs & metrics
+```
+http://localhost:8080/metrics
+http://localhost:8080/metrics/logs
+```
+To check any suspicious bot IPs
+```
+http://localhost:8080/metrics/suspicious
+```
+
+### Filtering logs
+Check which requests were BLOCKED, ALLOWED, for what reason where they allowed or blocked, what type of dev-key was used, what type of rate-limitng algorithm was used
+
+```
+http://localhost:8080/metrics/logs/filter?decision=BLOCKED
+http://localhost:8080/metrics/logs/filter?decision=ALLOWED
+
+http://localhost:8080/metrics/logs/filter?reason=ok
+http://localhost:8080/metrics/logs/filter?reason=rate_limit_exceeded
+http://localhost:8080/metrics/logs/filter?reason=invalid_or_missing_key
+http://localhost:8080/metrics/logs/filter?reason=abuse_detected
+
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-token
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-business
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-fixed
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-sliding
+
+http://localhost:8080/metrics/logs/filter?algorithm=token
+http://localhost:8080/metrics/logs/filter?algorithm=business
+http://localhost:8080/metrics/logs/filter?algorithm=fixed
+http://localhost:8080/metrics/logs/filter?algorithm=sliding
+```
+
+Multiple filters can be combined:
+```
+http://localhost:8080/metrics/logs/filter?decision=BLOCKED&algorithm=token
+```
+
+---
+
+## 5. Exporting Logs
+
+```
+http://localhost:8080/metrics/logs/export/json
+```
+Downloads a `logs.json` file with all current log entries.
+
+```
+http://localhost:8080/metrics/logs/export/csv
+```
+Downloads a `logs.csv` file that can be opened in Excel or any spreadsheet app.
+
+---
 
 > Brief Overview
 --------------------------------------------------
