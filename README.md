@@ -1,7 +1,7 @@
 # CS335 Microsoft Project 3:
 ## Rate Limiting and Abuse Detection API Gateway
 
-> NOT FINAL / TO BE UPDATED (last update: Mar 24th 2026)
+> NOT FINAL / TO BE UPDATED (last update: April 9th 2026)
 
 ---
 
