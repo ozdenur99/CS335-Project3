@@ -15,10 +15,12 @@ services:
       - "8080:8080"
     environment:
       - BACKEND_URL=http://backend:8081/api/
-      # redis matches the service name already defined in docker-compose - Docker's internal DNS resolves it automatically.
+      # redis matches the service name already defined in docker-compose
       - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
-      - backend 
+      - backend
+      - redis
     networks:
       - cs335-net
 

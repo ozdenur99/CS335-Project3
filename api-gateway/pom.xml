@@ -29,7 +29,7 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Redis, Spring Boot auto-configures a connection to localhost:6379 by default. -->
+        <!-- Redis dependency -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>

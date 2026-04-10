@@ -1,53 +1,56 @@
 package com.CS335_Project3.api_gateway.ratelimiter;
 
+import java.time.Duration;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
-import java.util.HashMap;
-import java.util.Map;
 
 @Component
 public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
 
-    private static class Window {
-        int requestCount;
-        long windowStart;
+    // Window size = 10 seconds
+    private static final long windowSizeMs = 10000;
 
-        Window(int requestCount, long windowStart) {
-            this.requestCount = requestCount;
-            this.windowStart = windowStart;
-        }
+    // TTL used by Redis (same as window size)
+    private static final Duration windowTTL = Duration.ofMillis(windowSizeMs);
+
+    // Prefix for Redis keys (one key per client)
+    private static final String KEY_PREFIX = "rate_limit:fixed:";
+
+    // Redis template used to interact with Redis
+    private final StringRedisTemplate redisTemplate;
+
+    /*
+        Main constructor used by Spring Boot
+
+        Spring injects Redis here when the app starts.
+    */
+    @Autowired
+    public FixedWindowRateLimiterStrategy(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
     }
 
-    // Store one window per client
-    private Map<String, Window> windows = new HashMap<>();
-
-    // Window size = 10 seconds
-    private final long windowSizeMs = 10000;
-
     @Override
-    public synchronized boolean isRequestAllowed(String clientId, int limit) {
+    public boolean isRequestAllowed(String clientId, int limit) {
 
-        long now = System.currentTimeMillis();
+        // Create unique key per client
+        String key = KEY_PREFIX + clientId;
 
-        // First request from this client
-        if (!windows.containsKey(clientId)) {
-            windows.put(clientId, new Window(0, now));
+        // Increment request count in Redis
+        Long count = redisTemplate.opsForValue().increment(key);
+
+        // Safety check (should not normally happen)
+        if (count == null) {
+            return false;
         }
 
-        Window window = windows.get(clientId);
-
-        // If current window has expired, reset it
-        if (now - window.windowStart >= windowSizeMs) {
-            window.requestCount = 0;
-            window.windowStart = now;
+        // First request in this window -> set expiry
+        if (count == 1L) {
+            redisTemplate.expire(key, windowTTL);
         }
 
-        // Allow request if still under the limit
-        if (window.requestCount < limit) {
-            window.requestCount++;
-            return true;
-        }
-
-        // Otherwise reject
-        return false;
+        // Allow request if still under limit
+        return count <= limit;
     }
 }
