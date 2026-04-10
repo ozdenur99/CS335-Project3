@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Manages multiple strategies and resolves 
  * hierarchical policies (App > Tenant > Global).
  */
-
 @Component
 public class RateLimiter {
 
@@ -33,12 +32,9 @@ public class RateLimiter {
     private final FixedWindowRateLimiterStrategy fixedWindowStrategy;
     private final SlidingWindowRateLimiterStrategy slidingWindowStrategy;
 
-    // 2a. Add config for hierarchical policies
+    // Config for hierarchical policies
     private final TenantRateLimitConfig tenantRateLimitConfig;
 
-     /*
-        Constructor with dependency injection for strategies and config
-    */
     /*
         This map stores which algorithm each client should use
 
@@ -66,31 +62,18 @@ public class RateLimiter {
     private final Map<String, Integer> clientLimits = new HashMap<>();
 
     /*
-        2b. Default constructor (used by tests and fallback)
-        Sets tenantConfig to null; the logic safely handles this via null-checks.
-    */
-    public RateLimiter() {
-        this.tokenBucketStrategy = new TokenBucketRateLimiterStrategy();
-        this.fixedWindowStrategy = new FixedWindowRateLimiterStrategy();
-        this.slidingWindowStrategy = new SlidingWindowRateLimiterStrategy();
-        this.tenantRateLimitConfig = null; // No config, will use defaults
+        Primary constructor used by Spring (dependency injection)
 
-        registerStrategies();
-        registerClientPolicies();
-    }
+        Spring injects each strategy here, including the Redis-backed
+        fixed window strategy.
 
-    /*
-       2b. Primary constructor used by Spring (dependency injection)
-       @Autowired forces Spring to use the 4-arg constructor.
-       This ensures 'tenantRateLimitConfig' is properly injected from application.properties,
-       enabling hierarchical policy resolution (App > Tenant > Global).
-       Note: The no-arg constructor is preserved solely for Unit Tests.
+        This is now the only constructor needed.
     */
     @Autowired
     public RateLimiter(TokenBucketRateLimiterStrategy tokenBucketStrategy,
-                   FixedWindowRateLimiterStrategy fixedWindowStrategy,
-                   SlidingWindowRateLimiterStrategy slidingWindowStrategy,
-                   TenantRateLimitConfig tenantRateLimitConfig) {
+                       FixedWindowRateLimiterStrategy fixedWindowStrategy,
+                       SlidingWindowRateLimiterStrategy slidingWindowStrategy,
+                       TenantRateLimitConfig tenantRateLimitConfig) {
 
         this.tokenBucketStrategy = tokenBucketStrategy;
         this.fixedWindowStrategy = fixedWindowStrategy;
@@ -110,7 +93,7 @@ public class RateLimiter {
         strategies.put("sliding", slidingWindowStrategy);
     }
 
-     /*
+    /*
         Assign algorithms and limits to clients
     */
     private void registerClientPolicies() {
@@ -119,14 +102,17 @@ public class RateLimiter {
         clientAlgorithms.put("dev-key-fixed", "fixed");
         clientAlgorithms.put("dev-key-sliding", "sliding");
 
-        //limit lowered from 5 to 3 for testing purposes to trigger 429 without sending too many requests for logging
+        // limit lowered from 5 to 3 for testing purposes
+        // to trigger 429 without sending too many requests for logging
         clientLimits.put("dev-key-token", 3);
         clientLimits.put("dev-key-fixed", 3);
         clientLimits.put("dev-key-sliding", 3);
 
         // Business client
         clientAlgorithms.put("dev-key-business", "token");
-        //limit also lowered from 10 to 6 for testing purposes to trigger 429 without sending too many requests for logging
+
+        // limit also lowered from 10 to 6 for testing purposes
+        // to trigger 429 without sending too many requests for logging
         clientLimits.put("dev-key-business", 6);
     }
 
@@ -151,13 +137,14 @@ public class RateLimiter {
         return strategy.isRequestAllowed(clientId, limit);
     }
 
-    //returns which rate limiting algorithm is assigned to the given client in the logs
-    //it defaults to "token" algorithm if the client is not found in the map
+    // returns which rate limiting algorithm is assigned to the given client in the logs
+    // it defaults to "token" algorithm if the client is not found in the map
     public String getAlgorithm(String clientId) {
         return clientAlgorithms.getOrDefault(clientId, "token");
-    }    
+    }
+
     /**
-     * [2c] New Overloaded method for Hierarchical Scoping.
+     * New overloaded method for hierarchical scoping.
      * Resolves limits in order: App > Tenant > Global Default.
      */
     public boolean isRequestAllowed(String clientId, String tenantId, String appId) {
@@ -198,7 +185,7 @@ public class RateLimiter {
         // 6. Strategy selection
         RateLimiterStrategy strategy = strategies.getOrDefault(algoName, tokenBucketStrategy);
 
-        /**
+        /*
          * 7. Composite Key Strategy:
          * We create a unique key representing the specific bucket.
          * Example: "tenant-acme/dashboard"

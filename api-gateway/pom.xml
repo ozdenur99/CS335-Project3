@@ -29,6 +29,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+         <!-- Redis dependency (ADD THIS) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- Configuration processor for @ConfigurationProperties -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
