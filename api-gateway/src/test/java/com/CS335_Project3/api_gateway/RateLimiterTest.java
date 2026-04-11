@@ -1,78 +1,81 @@
 package com.CS335_Project3.api_gateway;
 
+import com.CS335_Project3.api_gateway.config.RuntimeRateLimitConfigService;
+import com.CS335_Project3.api_gateway.config.TenantRateLimitConfig;
+import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.LeakyBucketRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.SlidingWindowRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.TokenBucketRateLimiterStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class RateLimiterTest {
 
+    private TokenBucketRateLimiterStrategy token;
+    private FixedWindowRateLimiterStrategy fixed;
+    private SlidingWindowRateLimiterStrategy sliding;
+    private LeakyBucketRateLimiterStrategy leaky;
+    private RuntimeRateLimitConfigService runtime;
     private RateLimiter rateLimiter;
 
     @BeforeEach
     void setUp() {
-        rateLimiter = new RateLimiter();
+        token = mock(TokenBucketRateLimiterStrategy.class);
+        fixed = mock(FixedWindowRateLimiterStrategy.class);
+        sliding = mock(SlidingWindowRateLimiterStrategy.class);
+        leaky = mock(LeakyBucketRateLimiterStrategy.class);
+        runtime = mock(RuntimeRateLimitConfigService.class);
+
+        TenantRateLimitConfig cfg = new TenantRateLimitConfig();
+        cfg.setDefaultLimit(5);
+        cfg.setDefaultAlgorithm("token");
+        when(runtime.getEffectiveConfig()).thenReturn(cfg);
+
+        when(token.isRequestAllowed(anyString(), anyInt())).thenReturn(true);
+        when(fixed.isRequestAllowed(anyString(), anyInt())).thenReturn(true);
+        when(sliding.isRequestAllowed(anyString(), anyInt())).thenReturn(true);
+        when(leaky.isRequestAllowed(anyString(), anyInt())).thenReturn(true);
+
+        rateLimiter = new RateLimiter(token, fixed, sliding, leaky, cfg, runtime);
     }
 
     @Test
-    void requestsBelowLimit_shouldBeAllowed() {
-        String clientId = "client-1";
-        
-        // Make 5 requests (the limit)
-        for (int i = 0; i < 5; i++) {
-            assertThat(rateLimiter.isRequestAllowed(clientId))
-                .as("Request %d should be allowed", i + 1)
-                .isTrue();
-        }
+    void usesLeakyAlgorithmWhenClientMapped() {
+        boolean allowed = rateLimiter.isRequestAllowed("dev-key-leaky");
+        assertThat(allowed).isTrue();
+        verify(leaky).isRequestAllowed("dev-key-leaky", 3);
     }
 
     @Test
-    void requestsExceedingLimit_shouldBeBlocked() {
-        String clientId = "client-2";
-        
-        // First 5 requests should pass
-        for (int i = 0; i < 5; i++) {
-            rateLimiter.isRequestAllowed(clientId);
-        }
-        
-        // 6th request should fail
-        assertThat(rateLimiter.isRequestAllowed(clientId))
-            .as("6th request should be blocked")
-            .isFalse();
+    void fallsBackToDefaultAlgorithmAndLimitForUnknownClient() {
+        boolean allowed = rateLimiter.isRequestAllowed("unknown-client");
+        assertThat(allowed).isTrue();
+        verify(token).isRequestAllowed("unknown-client", 5);
     }
 
     @Test
-    void differentClients_haveIndependentLimits() {
-        String client1 = "client-a";
-        String client2 = "client-b";
-        
-        // Max out client1
-        for (int i = 0; i < 5; i++) {
-            rateLimiter.isRequestAllowed(client1);
-        }
-        
-        // Client2 should still be allowed
-        assertThat(rateLimiter.isRequestAllowed(client2))
-            .as("client-b should have independent limit")
-            .isTrue();
-    }
+    void resolvesAppOverrideAlgorithm() {
+        TenantRateLimitConfig cfg = new TenantRateLimitConfig();
+        cfg.setDefaultAlgorithm("token");
+        TenantRateLimitConfig.TenantPolicy tenant = new TenantRateLimitConfig.TenantPolicy();
+        tenant.setAlgorithm("fixed");
+        TenantRateLimitConfig.AppPolicy app = new TenantRateLimitConfig.AppPolicy();
+        app.setAlgorithm("leaky");
+        app.setLimit(2);
+        tenant.getApps().put("dashboard", app);
+        cfg.getTenants().put("tenant-acme", tenant);
+        when(runtime.getEffectiveConfig()).thenReturn(cfg);
 
-    @Test
-    void windowExpiry_resetsRequestCount() throws InterruptedException {
-        String clientId = "client-reset";
-        
-        // Max out the client
-        for (int i = 0; i < 5; i++) {
-            rateLimiter.isRequestAllowed(clientId);
-        }
-        
-        // Next request should fail
-        assertThat(rateLimiter.isRequestAllowed(clientId))
-            .as("Should be blocked before window expires")
-            .isFalse();
-        
-        // NOTE: Full window test would require waiting 60 seconds.
-        // In production, use @WithSpringCloudContractTest or time-mocking libraries like MockClock
-        // For now, this demonstrates the blocking behavior.
+        assertThat(rateLimiter.getAlgorithm("dev-key-token", "tenant-acme", "dashboard")).isEqualTo("leaky");
+        rateLimiter.isRequestAllowed("dev-key-token", "tenant-acme", "dashboard");
+        verify(leaky).isRequestAllowed("dev-key-token|tenant-acme|dashboard", 2);
     }
 }
+

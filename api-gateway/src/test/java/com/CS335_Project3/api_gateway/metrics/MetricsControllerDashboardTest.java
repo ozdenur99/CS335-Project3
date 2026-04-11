@@ -68,4 +68,26 @@ class MetricsControllerDashboardTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0]").value("127.0.0.1"));
     }
+
+    @Test
+    void returnsFilteredEventFeedPayload() throws Exception {
+        when(metricsService.getEventFeed(30, 100, "tenant-acme", "dashboard", null, null, 429, "token", null))
+                .thenReturn(Map.of(
+                        "windowMinutes", 30,
+                        "total", 1,
+                        "items", List.of(Map.of("tenantId", "tenant-acme", "appId", "dashboard", "statusCode", 429))
+                ));
+
+        mockMvc.perform(get("/metrics/dashboard/events")
+                        .param("minutes", "30")
+                        .param("limit", "100")
+                        .param("tenantId", "tenant-acme")
+                        .param("appId", "dashboard")
+                        .param("statusCode", "429")
+                        .param("algorithm", "token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].tenantId").value("tenant-acme"))
+                .andExpect(jsonPath("$.items[0].statusCode").value(429));
+    }
 }

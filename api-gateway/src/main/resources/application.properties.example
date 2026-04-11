@@ -4,5 +4,17 @@ server.port=8080
 # Spring Application Name
 spring.application.name=api-gateway
 
-# API Keys (comma-separated). Defaults to dev-key-alpha,dev-key-beta if not set
+# API Keys (comma-separated). Defaults include token/fixed/sliding/leaky/business dev keys
 # gateway.api-keys=your-key-1,your-key-2
+
+# Redis (works locally and in Docker with REDIS_HOST/REDIS_PORT overrides)
+spring.data.redis.host=${REDIS_HOST:localhost}
+spring.data.redis.port=${REDIS_PORT:6379}
+
+# Runtime fallback policy defaults
+rate-limit.default-limit=5
+rate-limit.default-algorithm=token
+
+# Hourly metrics export
+metrics.export.cron=0 0 * * * *
+metrics.export.path=${METRICS_EXPORT_PATH:/var/lib/api-gateway/metrics-exports}

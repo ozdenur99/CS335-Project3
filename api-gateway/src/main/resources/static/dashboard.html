@@ -8,7 +8,7 @@
         body { font-family: Arial, sans-serif; margin: 16px; background: #f6f8fb; color: #111827; }
         h1 { margin: 0 0 10px; }
         .controls, .cards, .grid { display: grid; gap: 12px; }
-        .controls { grid-template-columns: 160px 120px 120px; align-items: end; margin-bottom: 12px; }
+        .controls { grid-template-columns: repeat(8, minmax(120px, 1fr)); align-items: end; margin-bottom: 12px; }
         .cards { grid-template-columns: repeat(4, minmax(120px, 1fr)); margin-bottom: 12px; }
         .grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
         .card, .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
@@ -44,6 +44,44 @@
         <div>
             <label for="riskLimit">Risk rows</label>
             <input id="riskLimit" type="number" value="10" min="1" max="50" />
+        </div>
+        <div>
+            <label for="tenantId">Tenant</label>
+            <input id="tenantId" type="text" placeholder="tenant-acme" />
+        </div>
+        <div>
+            <label for="appId">App</label>
+            <input id="appId" type="text" placeholder="dashboard" />
+        </div>
+        <div>
+            <label for="apiKeyFilter">API Key</label>
+            <input id="apiKeyFilter" type="text" placeholder="dev-key-token" />
+        </div>
+        <div>
+            <label for="ipFilter">Client IP</label>
+            <input id="ipFilter" type="text" placeholder="127.0.0.1" />
+        </div>
+        <div>
+            <label for="statusFilter">Status</label>
+            <select id="statusFilter">
+                <option value="">All</option>
+                <option value="200">200</option>
+                <option value="400">400</option>
+                <option value="401">401</option>
+                <option value="403">403</option>
+                <option value="429">429</option>
+                <option value="500">500</option>
+            </select>
+        </div>
+        <div>
+            <label for="algoFilter">Algorithm</label>
+            <select id="algoFilter">
+                <option value="">All</option>
+                <option value="token">token</option>
+                <option value="fixed">fixed</option>
+                <option value="sliding">sliding</option>
+                <option value="leaky">leaky</option>
+            </select>
         </div>
         <button id="refreshBtn">Refresh</button>
     </div>
@@ -94,6 +132,14 @@
         <table>
             <thead><tr><th>Time</th><th>Status</th><th>Latency</th><th>Decision</th><th>Reason</th><th>Path</th></tr></thead>
             <tbody id="detailBody"></tbody>
+        </table>
+    </div>
+
+    <div class="panel" style="margin-top:12px;">
+        <h3>Filtered Event Feed</h3>
+        <table>
+            <thead><tr><th>Time</th><th>Tenant</th><th>App</th><th>API Key</th><th>IP</th><th>Status</th><th>Algo</th><th>Decision</th><th>Path</th></tr></thead>
+            <tbody id="eventsBody"></tbody>
         </table>
     </div>
 
@@ -180,15 +226,29 @@
         async function loadDashboard() {
             const minutes = Number(document.getElementById("minutes").value || 30);
             const riskLimit = Number(document.getElementById("riskLimit").value || 10);
+            const tenantId = document.getElementById("tenantId").value.trim();
+            const appId = document.getElementById("appId").value.trim();
+            const apiKeyFilter = document.getElementById("apiKeyFilter").value.trim();
+            const ipFilter = document.getElementById("ipFilter").value.trim();
+            const statusFilter = document.getElementById("statusFilter").value.trim();
+            const algoFilter = document.getElementById("algoFilter").value.trim();
+            const eventParams = new URLSearchParams({ minutes: String(minutes), limit: "100" });
+            if (tenantId) eventParams.set("tenantId", tenantId);
+            if (appId) eventParams.set("appId", appId);
+            if (apiKeyFilter) eventParams.set("apiKey", apiKeyFilter);
+            if (ipFilter) eventParams.set("ip", ipFilter);
+            if (statusFilter) eventParams.set("statusCode", statusFilter);
+            if (algoFilter) eventParams.set("algorithm", algoFilter);
 
-            const [snapshot, overall, statusTrend, statusDist, latency, algo, risk] = await Promise.all([
+            const [snapshot, overall, statusTrend, statusDist, latency, algo, risk, events] = await Promise.all([
                 getJson("/metrics"),
                 getJson(`/metrics/dashboard/overall-trend?minutes=${minutes}`),
                 getJson(`/metrics/dashboard/status-trend?minutes=${minutes}`),
                 getJson(`/metrics/dashboard/status-distribution?minutes=${minutes}`),
                 getJson(`/metrics/dashboard/latency-trend?minutes=${minutes}`),
                 getJson(`/metrics/dashboard/algorithm-blocking?minutes=${minutes}`),
-                getJson(`/metrics/dashboard/risk-leaderboard?minutes=${minutes}&limit=${riskLimit}`)
+                getJson(`/metrics/dashboard/risk-leaderboard?minutes=${minutes}&limit=${riskLimit}`),
+                getJson(`/metrics/dashboard/events?${eventParams.toString()}`)
             ]);
 
             document.getElementById("totalReq").textContent = snapshot.totalRequests ?? 0;
@@ -229,6 +289,14 @@
                 tr.innerHTML = `<td class="mono">${esc(item.client)}</td><td>${item.requestCount}</td><td>${item.status403}</td><td>${item.status429}</td><td>${item.status5xx}</td><td>${item.riskScore}</td>`;
                 tr.addEventListener("click", () => loadClientDetail(item.apiKey, item.ip, minutes));
                 riskBody.appendChild(tr);
+            });
+
+            const eventsBody = document.getElementById("eventsBody");
+            eventsBody.innerHTML = "";
+            (events.items || []).forEach(e => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${esc(e.timestamp)}</td><td>${esc(e.tenantId)}</td><td>${esc(e.appId)}</td><td class="mono">${esc(e.apiKey)}</td><td>${esc(e.ip)}</td><td>${esc(e.statusCode)}</td><td>${esc(e.algorithm)}</td><td>${esc(e.decision)}</td><td class="mono">${esc(e.path)}</td>`;
+                eventsBody.appendChild(tr);
             });
         }
 

@@ -164,4 +164,18 @@ public class MetricsController {
                                                @RequestParam(defaultValue = "50") int limit) {
         return metricsService.getClientDetail(apiKey, ip, minutes, limit);
     }
+
+    //GET /metrics/dashboard/events?minutes=30&limit=100&tenantId=tenant-acme&appId=dashboard&statusCode=429&algorithm=token
+    @GetMapping("/dashboard/events")
+    public Map<String, Object> getEventFeed(@RequestParam(defaultValue = "30") int minutes,
+                                            @RequestParam(defaultValue = "100") int limit,
+                                            @RequestParam(required = false) String tenantId,
+                                            @RequestParam(required = false) String appId,
+                                            @RequestParam(required = false) String apiKey,
+                                            @RequestParam(required = false) String ip,
+                                            @RequestParam(required = false) Integer statusCode,
+                                            @RequestParam(required = false) String algorithm,
+                                            @RequestParam(required = false) String decision) {
+        return metricsService.getEventFeed(minutes, limit, tenantId, appId, apiKey, ip, statusCode, algorithm, decision);
+    }
 }

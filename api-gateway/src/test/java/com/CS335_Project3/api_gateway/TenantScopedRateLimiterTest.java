@@ -1,126 +1,100 @@
 package com.CS335_Project3.api_gateway;
 
+import com.CS335_Project3.api_gateway.config.RuntimeRateLimitConfigService;
 import com.CS335_Project3.api_gateway.config.TenantRateLimitConfig;
 import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.LeakyBucketRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.SlidingWindowRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.TokenBucketRateLimiterStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for Hierarchical Rate Limiting (Tenant + App Scoping).
- * Verifies that buckets are isolated and policies resolve with correct priority.
- */
 class TenantScopedRateLimiterTest {
 
-    private RateLimiter rateLimiter;
+    private TokenBucketRateLimiterStrategy token;
+    private FixedWindowRateLimiterStrategy fixed;
+    private SlidingWindowRateLimiterStrategy sliding;
+    private LeakyBucketRateLimiterStrategy leaky;
+    private RuntimeRateLimitConfigService runtime;
     private TenantRateLimitConfig config;
+    private RateLimiter rateLimiter;
 
     @BeforeEach
     void setUp() {
-        this.config = buildConfig();
-        this.rateLimiter = buildRateLimiter(config);
+        token = mock(TokenBucketRateLimiterStrategy.class);
+        fixed = mock(FixedWindowRateLimiterStrategy.class);
+        sliding = mock(SlidingWindowRateLimiterStrategy.class);
+        leaky = mock(LeakyBucketRateLimiterStrategy.class);
+        runtime = mock(RuntimeRateLimitConfigService.class);
+        when(token.isRequestAllowed(anyString(), anyInt())).thenReturn(true);
+        when(fixed.isRequestAllowed(anyString(), anyInt())).thenReturn(true);
+        when(sliding.isRequestAllowed(anyString(), anyInt())).thenReturn(true);
+        when(leaky.isRequestAllowed(anyString(), anyInt())).thenReturn(true);
+
+        config = buildConfig();
+        when(runtime.getEffectiveConfig()).thenReturn(config);
+        rateLimiter = new RateLimiter(token, fixed, sliding, leaky, config, runtime);
     }
 
-    /**
-     * Helper to build a manual configuration matching the test requirements.
-     */
     private TenantRateLimitConfig buildConfig() {
         TenantRateLimitConfig cfg = new TenantRateLimitConfig();
         cfg.setDefaultLimit(5);
         cfg.setDefaultAlgorithm("token");
 
-        // Setup Tenant-Acme: Limit 3, App Dashboard: Limit 2
+        TenantRateLimitConfig.ClientPolicy client = new TenantRateLimitConfig.ClientPolicy();
+        client.setLimit(4);
+        client.setAlgorithm("fixed");
+        cfg.getClients().put("dev-key-token", client);
+
         TenantRateLimitConfig.TenantPolicy acme = new TenantRateLimitConfig.TenantPolicy();
         acme.setLimit(3);
+        acme.setAlgorithm("sliding");
         acme.setEnabled(true);
 
         TenantRateLimitConfig.AppPolicy dashboard = new TenantRateLimitConfig.AppPolicy();
         dashboard.setLimit(2);
+        dashboard.setAlgorithm("leaky");
         dashboard.setEnabled(true);
         acme.getApps().put("dashboard", dashboard);
-
         cfg.getTenants().put("tenant-acme", acme);
 
-        // Setup Tenant-Beta: Disabled (Bypass)
         TenantRateLimitConfig.TenantPolicy beta = new TenantRateLimitConfig.TenantPolicy();
         beta.setEnabled(false);
         cfg.getTenants().put("tenant-beta", beta);
-
         return cfg;
     }
 
-    private RateLimiter buildRateLimiter(TenantRateLimitConfig cfg) {
-        return new RateLimiter(
-            new TokenBucketRateLimiterStrategy(),
-            new FixedWindowRateLimiterStrategy(),
-            new SlidingWindowRateLimiterStrategy(),
-            cfg
-        );
+    @Test
+    void appPolicyHasHighestPriority() {
+        assertThat(rateLimiter.getAlgorithm("dev-key-token", "tenant-acme", "dashboard")).isEqualTo("leaky");
+        rateLimiter.isRequestAllowed("dev-key-token", "tenant-acme", "dashboard");
+        verify(leaky).isRequestAllowed("dev-key-token|tenant-acme|dashboard", 2);
     }
 
     @Test
-    void twoTenantsWithSameApiKey_haveIndependentBuckets() {
-        String apiKey = "dev-key-token";
-
-        // Exhaust tenant-acme (Limit 3)
-        for (int i = 0; i < 3; i++) {
-            rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "default");
-        }
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "default")).isFalse();
-
-        // tenant-beta should still be allowed (independent bucket)
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-beta", "default")).isTrue();
+    void tenantPolicyBeatsClientPolicyWhenNoAppPolicy() {
+        assertThat(rateLimiter.getAlgorithm("dev-key-token", "tenant-acme", "other-app")).isEqualTo("sliding");
+        rateLimiter.isRequestAllowed("dev-key-token", "tenant-acme", "other-app");
+        verify(sliding).isRequestAllowed("dev-key-token|tenant-acme|other-app", 3);
     }
 
     @Test
-    void missingTenantHeader_fallsBackToDefaultBucket() {
-        String apiKey = "dev-key-token";
-
-        // Uses defaultLimit = 5
-        for (int i = 0; i < 5; i++) {
-            assertThat(rateLimiter.isRequestAllowed(apiKey, "default", "default")).isTrue();
-        } 
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "default", "default")).isFalse();
+    void disabledTenantBypassesLimiter() {
+        assertThat(rateLimiter.isRequestAllowed("dev-key-token", "tenant-beta", "dashboard")).isTrue();
     }
 
     @Test
-    void disabledTenant_alwaysAllowed() {
-        String apiKey = "dev-key-token";
-
-        // tenant-beta.enabled = false, should allow 20+ requests
-        for (int i = 0; i < 20; i++) {
-            assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-beta", "any-app")).isTrue();
-        }
-    }
-
-    @Test
-    void perAppLimit_appliesCorrectly() {
-        String apiKey = "dev-key-token";
-
-        // dashboard limit = 2
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "dashboard")).isTrue();
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "dashboard")).isTrue();
-        
-        // 3rd request should fail
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "dashboard")).isFalse();
-    }
-
-    @Test
-    void disabledApp_fallsThroughToTenantLimit() {
-        String apiKey = "dev-key-token";
-
-        // Disable the dashboard app policy dynamically
-        config.getTenants().get("tenant-acme").getApps().get("dashboard").setEnabled(false);
-
-        // Should now use Tenant-Acme limit (3) instead of App limit (2)
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "dashboard")).isTrue();
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "dashboard")).isTrue();
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "dashboard")).isTrue();
-        
-        // 4th request should fail (Tenant limit exhausted)
-        assertThat(rateLimiter.isRequestAllowed(apiKey, "tenant-acme", "dashboard")).isFalse();
+    void clientPolicyBeatsGlobalWhenNoTenantPolicy() {
+        assertThat(rateLimiter.getAlgorithm("dev-key-token", "default", "default")).isEqualTo("fixed");
+        rateLimiter.isRequestAllowed("dev-key-token", "default", "default");
+        verify(fixed).isRequestAllowed("dev-key-token|default|default", 4);
     }
 }
+

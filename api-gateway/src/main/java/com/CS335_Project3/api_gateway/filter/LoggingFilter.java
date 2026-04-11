@@ -60,6 +60,10 @@ public class LoggingFilter extends OncePerRequestFilter {
         String apiKey = request.getHeader("X-API-Key");
         String path   = uri;
         long startNs  = System.nanoTime();
+        String rawTenant = request.getHeader("X-Tenant-Id");
+        String rawApp = request.getHeader("X-App-Id");
+        String tenantId = (rawTenant == null || rawTenant.isBlank()) ? "default" : rawTenant.toLowerCase();
+        String appId = (rawApp == null || rawApp.isBlank()) ? "default" : rawApp.toLowerCase();
 
         if (apiKey == null || apiKey.isBlank()) {
             apiKey = "MISSING";
@@ -67,7 +71,7 @@ public class LoggingFilter extends OncePerRequestFilter {
 
         //gets the client IP and which rate limiting algorithm they are assigned to
         String ip        = request.getRemoteAddr();
-        String algorithm = rateLimiter.getAlgorithm(apiKey.toLowerCase());
+        String algorithm = rateLimiter.getAlgorithm(apiKey.toLowerCase(), tenantId, appId);
 
         //records IP for bot detection
         botDetector.record(ip);
@@ -75,7 +79,7 @@ public class LoggingFilter extends OncePerRequestFilter {
             wrappedResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
             requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm);
             long latencyMs = (System.nanoTime() - startNs) / 1_000_000L;
-            metricsService.recordRequest(apiKey, ip, path, HttpServletResponse.SC_FORBIDDEN, latencyMs, algorithm, "BLOCKED", "suspected_bot");
+            metricsService.recordRequest(apiKey, ip, path, HttpServletResponse.SC_FORBIDDEN, latencyMs, algorithm, "BLOCKED", "suspected_bot", tenantId, appId);
             wrappedResponse.copyBodyToResponse();
             return;
         }
@@ -109,7 +113,7 @@ public class LoggingFilter extends OncePerRequestFilter {
 
         //records the full request details in the log and update the metrics counters
         requestLogger.log(apiKey, ip, path, decision, reason, algorithm);
-        metricsService.recordRequest(apiKey, ip, path, status, latencyMs, algorithm, decision, reason);
+        metricsService.recordRequest(apiKey, ip, path, status, latencyMs, algorithm, decision, reason, tenantId, appId);
 
         //copies the response body back so the client still receives it
         //(ContentCachingResponseWrapper holds it in memory)
@@ -119,6 +123,7 @@ public class LoggingFilter extends OncePerRequestFilter {
     private boolean isExcluded(String path) {
         return EXCLUDED_PATHS.contains(path)
                 || path.startsWith("/metrics")
-                || path.startsWith("/dashboard");
+                || path.startsWith("/dashboard")
+                || path.startsWith("/config");
     }
 }

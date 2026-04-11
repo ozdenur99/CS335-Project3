@@ -18,6 +18,7 @@ public class TenantRateLimitConfig {
     // Global default limits
     private int defaultLimit = 5;  
     private String defaultAlgorithm = "token";
+    private Map<String, ClientPolicy> clients = new HashMap<>();
 
     /** * Map of Tenant-specific policies. 
      * Key: tenantId (e.g., "tenant-acme") 
@@ -49,6 +50,14 @@ public class TenantRateLimitConfig {
 
     public void setTenants(Map<String, TenantPolicy> tenants) {
         this.tenants = tenants;
+    }
+
+    public Map<String, ClientPolicy> getClients() {
+        return clients;
+    }
+
+    public void setClients(Map<String, ClientPolicy> clients) {
+        this.clients = clients;
     }
 
     /**
@@ -85,11 +94,30 @@ public class TenantRateLimitConfig {
      */
     public static class AppPolicy {
         private int limit = 5;
+        private String algorithm;
         private boolean enabled = true; 
 
         // Getters and Setters 
         public int getLimit() { return limit; }
         public void setLimit(int limit) { this.limit = limit; }
+
+        public String getAlgorithm() { return algorithm; }
+        public void setAlgorithm(String algorithm) { this.algorithm = algorithm; }
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    }
+
+    public static class ClientPolicy {
+        private int limit = 5;
+        private String algorithm = "token";
+        private boolean enabled = true;
+
+        public int getLimit() { return limit; }
+        public void setLimit(int limit) { this.limit = limit; }
+
+        public String getAlgorithm() { return algorithm; }
+        public void setAlgorithm(String algorithm) { this.algorithm = algorithm; }
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }

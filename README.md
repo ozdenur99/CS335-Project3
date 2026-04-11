@@ -10,6 +10,16 @@
 
 This project implements a **Rate Limiting and Abuse Detection API Gateway**. Which is the single point of access for clients wanting to use backend services. The gateway handles incoming requests, routes valid ones to the appropriate service and protects backend services by controlling access frequency and detecting user misuse
 
+### Current implementation highlights (April 2026)
+
+- Redis-backed metrics time series + raw event stream for dashboard drill-down
+- Dashboard endpoints under `/metrics/dashboard/*` (trends, status, latency, risk, filtered event feed)
+- Runtime rate-limit configuration API under `/config/rate-limit` (download/upload JSON)
+- Hierarchical policy resolution: **App > Tenant > Client > Global**
+- Four algorithms wired in gateway strategy registry: `token`, `fixed`, `sliding`, `leaky`
+- Scheduled hourly metrics export to JSON files (`metrics.export.*` properties)
+- Docker compose runs **two gateway instances** sharing one Redis (distributed proof)
+
 | | |
 |---|---|
 | **Language** | Java 21 |
@@ -32,6 +42,13 @@ For more details, please refer to our Docs.
 ## Architecture
 
 [ Client ]  ──►  [API Gateway: 8080]  ──►  [Backend Service: 8081]
+
+Distributed demo (docker compose):
+
+- `gateway-1` on `:8080`
+- `gateway-2` on `:8082`
+- shared `redis` on `:6379` with AOF enabled
+- each gateway writes hourly exports to mounted volume (`METRICS_EXPORT_PATH`)
 
 
 The API Gateway acts as a "middleman" between clients and a simple CRUD backend service, enforcing rate limits and detecting abuse patterns to protect the backend from excessive or malicious traffic

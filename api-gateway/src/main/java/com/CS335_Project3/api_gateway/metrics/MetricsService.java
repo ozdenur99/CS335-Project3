@@ -30,7 +30,8 @@ public class MetricsService {
     private static final String BLOCKED_BY_ALGORITHM_HASH = "metrics:blocked:algorithm";
     private static final String BLOCKED_BY_REASON_HASH = "metrics:blocked:reason";
     private static final long RAW_EVENT_RETENTION_MS = 24L * 60L * 60L * 1000L;
-    private static final int EXPECTED_EVENT_FIELDS = 9;
+    private static final int EXPECTED_EVENT_FIELDS_V1 = 9;
+    private static final int EXPECTED_EVENT_FIELDS_V2 = 11;
     private static final double RISK_VELOCITY_THRESHOLD = 50.0;
     private static final double RISK_VELOCITY_WEIGHT = 40.0;
     private static final double RISK_FAILURE_WEIGHT = 35.0;
@@ -53,7 +54,9 @@ public class MetricsService {
                 0L,
                 "unknown",
                 wasBlocked ? "BLOCKED" : "ALLOWED",
-                wasBlocked ? "blocked" : "ok"
+                wasBlocked ? "blocked" : "ok",
+                "default",
+                "default"
         );
     }
 
@@ -65,7 +68,9 @@ public class MetricsService {
                               long latencyMs,
                               String algorithm,
                               String decision,
-                              String reason) {
+                              String reason,
+                              String tenantId,
+                              String appId) {
         long now = System.currentTimeMillis();
         long minuteBucket = toMinuteBucket(now);
         long hourBucket = toHourBucket(now);
@@ -75,6 +80,8 @@ public class MetricsService {
         String normalizedAlgorithm = normalize(algorithm);
         String normalizedDecision = normalize(decision);
         String normalizedReason = normalize(reason);
+        String normalizedTenant = normalize(tenantId);
+        String normalizedApp = normalize(appId);
         String clientId = toClientId(normalizedApiKey, normalizedIp);
 
         redisTemplate.opsForValue().increment(TOTAL_KEY, 1);
@@ -94,9 +101,20 @@ public class MetricsService {
         redisTemplate.opsForSet().add(CLIENTS_SET, clientId);
 
         String event = serializeEvent(now, normalizedApiKey, normalizedIp, normalizedPath, statusCode,
-                latencyMs, normalizedAlgorithm, normalizedDecision, normalizedReason);
+                latencyMs, normalizedAlgorithm, normalizedDecision, normalizedReason, normalizedTenant, normalizedApp);
         redisTemplate.opsForZSet().add(EVENTS_ZSET, event, now);
         redisTemplate.opsForZSet().removeRangeByScore(EVENTS_ZSET, 0, now - RAW_EVENT_RETENTION_MS);
+    }
+
+    public void recordRequest(String apiKey,
+                              String ip,
+                              String path,
+                              int statusCode,
+                              long latencyMs,
+                              String algorithm,
+                              String decision,
+                              String reason) {
+        recordRequest(apiKey, ip, path, statusCode, latencyMs, algorithm, decision, reason, "default", "default");
     }
 
     //builds and returns a summary of all metrics as a Map
@@ -309,6 +327,44 @@ public class MetricsService {
         return response;
     }
 
+    public Map<String, Object> getEventFeed(int minutes,
+                                            int limit,
+                                            String tenantId,
+                                            String appId,
+                                            String apiKey,
+                                            String ip,
+                                            Integer statusCode,
+                                            String algorithm,
+                                            String decision) {
+        int safeMinutes = clamp(minutes, 5, 1440);
+        int safeLimit = clamp(limit, 1, 10000);
+        long now = System.currentTimeMillis();
+        long startTime = now - (long) safeMinutes * 60_000L;
+        List<MetricEvent> events = getEvents(
+                startTime,
+                now,
+                (apiKey == null || apiKey.isBlank()) ? null : normalize(apiKey),
+                (ip == null || ip.isBlank()) ? null : normalize(ip),
+                (tenantId == null || tenantId.isBlank()) ? null : normalize(tenantId),
+                (appId == null || appId.isBlank()) ? null : normalize(appId),
+                statusCode,
+                (algorithm == null || algorithm.isBlank()) ? null : normalize(algorithm),
+                (decision == null || decision.isBlank()) ? null : normalize(decision)
+        );
+
+        List<Map<String, Object>> eventRows = events.stream()
+                .sorted((a, b) -> Long.compare(b.timestampMs, a.timestampMs))
+                .limit(safeLimit)
+                .map(this::toEventMap)
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("windowMinutes", safeMinutes);
+        response.put("total", events.size());
+        response.put("items", eventRows);
+        return response;
+    }
+
     private Map<String, Object> buildRiskRow(ClientRiskStats stats, int windowMinutes) {
         double velocityRatio = Math.min(1.0, stats.total / RISK_VELOCITY_THRESHOLD);
         double blockRatio = stats.total == 0 ? 0.0 : (double) stats.blocked / stats.total;
@@ -364,7 +420,15 @@ public class MetricsService {
         return response;
     }
 
-    private List<MetricEvent> getEvents(long start, long end, String apiKeyFilter, String ipFilter) {
+    private List<MetricEvent> getEvents(long start,
+                                        long end,
+                                        String apiKeyFilter,
+                                        String ipFilter,
+                                        String tenantFilter,
+                                        String appFilter,
+                                        Integer statusCodeFilter,
+                                        String algorithmFilter,
+                                        String decisionFilter) {
         Set<String> rawEvents = redisTemplate.opsForZSet().rangeByScore(EVENTS_ZSET, start, end);
         if (rawEvents == null || rawEvents.isEmpty()) {
             return List.of();
@@ -382,14 +446,35 @@ public class MetricsService {
             if (ipFilter != null && !Objects.equals(event.ip, ipFilter)) {
                 continue;
             }
+            if (tenantFilter != null && !Objects.equals(event.tenantId, tenantFilter)) {
+                continue;
+            }
+            if (appFilter != null && !Objects.equals(event.appId, appFilter)) {
+                continue;
+            }
+            if (statusCodeFilter != null && event.statusCode != statusCodeFilter) {
+                continue;
+            }
+            if (algorithmFilter != null && !Objects.equals(event.algorithm, algorithmFilter)) {
+                continue;
+            }
+            if (decisionFilter != null && !Objects.equals(event.decision, decisionFilter)) {
+                continue;
+            }
             parsed.add(event);
         }
         return parsed;
     }
 
+    private List<MetricEvent> getEvents(long start, long end, String apiKeyFilter, String ipFilter) {
+        return getEvents(start, end, apiKeyFilter, ipFilter, null, null, null, null, null);
+    }
+
     private Map<String, Object> toEventMap(MetricEvent event) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("timestamp", Instant.ofEpochMilli(event.timestampMs).toString());
+        map.put("tenantId", event.tenantId);
+        map.put("appId", event.appId);
         map.put("apiKey", event.apiKey);
         map.put("ip", event.ip);
         map.put("path", event.path);
@@ -474,17 +559,22 @@ public class MetricsService {
                                          long latencyMs,
                                          String algorithm,
                                          String decision,
-                                         String reason) {
+                                         String reason,
+                                         String tenantId,
+                                         String appId) {
         return timestampMs + "|" + apiKey + "|" + ip + "|" + path + "|" + statusCode
-                + "|" + latencyMs + "|" + algorithm + "|" + decision + "|" + reason;
+                + "|" + latencyMs + "|" + algorithm + "|" + decision + "|" + reason
+                + "|" + tenantId + "|" + appId;
     }
 
     private static MetricEvent parseEvent(String raw) {
-        String[] parts = raw.split("\\|", EXPECTED_EVENT_FIELDS);
-        if (parts.length != EXPECTED_EVENT_FIELDS) {
+        String[] parts = raw.split("\\|", EXPECTED_EVENT_FIELDS_V2);
+        if (parts.length != EXPECTED_EVENT_FIELDS_V1 && parts.length != EXPECTED_EVENT_FIELDS_V2) {
             return null;
         }
         try {
+            String tenantId = parts.length >= EXPECTED_EVENT_FIELDS_V2 ? parts[9] : "UNKNOWN";
+            String appId = parts.length >= EXPECTED_EVENT_FIELDS_V2 ? parts[10] : "UNKNOWN";
             return new MetricEvent(
                     Long.parseLong(parts[0]),
                     parts[1],
@@ -494,7 +584,9 @@ public class MetricsService {
                     Long.parseLong(parts[5]),
                     parts[6],
                     parts[7],
-                    parts[8]
+                    parts[8],
+                    tenantId,
+                    appId
             );
         } catch (Exception ex) {
             return null;
@@ -511,6 +603,8 @@ public class MetricsService {
         private final String algorithm;
         private final String decision;
         private final String reason;
+        private final String tenantId;
+        private final String appId;
 
         private MetricEvent(long timestampMs,
                             String apiKey,
@@ -520,7 +614,9 @@ public class MetricsService {
                             long latencyMs,
                             String algorithm,
                             String decision,
-                            String reason) {
+                            String reason,
+                            String tenantId,
+                            String appId) {
             this.timestampMs = timestampMs;
             this.apiKey = apiKey;
             this.ip = ip;
@@ -530,6 +626,8 @@ public class MetricsService {
             this.algorithm = algorithm;
             this.decision = decision;
             this.reason = reason;
+            this.tenantId = tenantId;
+            this.appId = appId;
         }
     }
 
