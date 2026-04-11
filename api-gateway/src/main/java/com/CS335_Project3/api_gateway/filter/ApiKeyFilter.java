@@ -72,14 +72,16 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         }
 
         // Rate limiter logic
-        // Extract tenant and app headers — fall back to "default" if missing
+        // Only use tenant/app if they were actually provided
         String rawTenant = request.getHeader("X-Tenant-Id");
-        String rawApp    = request.getHeader("X-App-Id");
-        String tenantId  = (rawTenant == null || rawTenant.isBlank()) ? "default" : rawTenant.toLowerCase();
-        String appId     = (rawApp    == null || rawApp.isBlank())    ? "default" : rawApp.toLowerCase();
+        String rawApp = request.getHeader("X-App-Id");
+
+        String tenantId = (rawTenant == null || rawTenant.isBlank()) ? null : rawTenant.toLowerCase();
+        String appId = (rawApp == null || rawApp.isBlank()) ? null : rawApp.toLowerCase();
+
         if (!rateLimiter.isRequestAllowed(apiKey.toLowerCase(), tenantId, appId)) {
-            log.warn("BLOCKED reason=rate_limit_exceeded key={} tenant={} app={} path={}", 
-                apiKey, tenantId, appId, path);  
+            log.warn("BLOCKED reason=rate_limit_exceeded key={} tenant={} app={} path={}",
+                apiKey, tenantId, appId, path);
             sendError(response, request, 429,
                 "Too Many Requests", "Request could not be processed at this time.");
             return;

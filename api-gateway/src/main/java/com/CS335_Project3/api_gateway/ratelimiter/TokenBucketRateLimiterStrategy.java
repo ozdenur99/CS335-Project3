@@ -1,8 +1,10 @@
 package com.CS335_Project3.api_gateway.ratelimiter;
 
+import java.time.Duration;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
-import java.util.HashMap;
-import java.util.Map;
 
 @Component
 public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
@@ -17,72 +19,65 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
        If the bucket has no tokens left then the request is rejected
     */
 
-    /*
-        This is a helper class to store each clients bucket state
-        Tokens = how many tokens client has
-        lastRefillTime = when last refilled their bucket
-    */
-    private static class Bucket {
+    private static final String KEY_PREFIX = "rate_limit:token:";
+    private static final String TOKENS_FIELD = "tokens";
+    private static final String LAST_REFILL_FIELD = "lastRefillTime";
+    private static final Duration BUCKET_TTL = Duration.ofSeconds(120);
+
+    private final StringRedisTemplate redisTemplate;
+
+    // token refill rate was slowed to 5 tokens every 120 seconds to test logging to return 429
+    private final double refillRate = 5.0 / 120000.0;
+
+    @Autowired
+    public TokenBucketRateLimiterStrategy(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    @Override
+    public boolean isRequestAllowed(String clientId, int limit) {
+
+        String key = KEY_PREFIX + clientId;
+        long now = System.currentTimeMillis();
+
+        Object tokensObj = redisTemplate.opsForHash().get(key, TOKENS_FIELD);
+        Object lastRefillObj = redisTemplate.opsForHash().get(key, LAST_REFILL_FIELD);
+
         double tokens;
         long lastRefillTime;
 
-        Bucket(double tokens, long lastRefillTime) {
-            this.tokens = tokens;
-            this.lastRefillTime = lastRefillTime;
-        }
-    }
-
-    // Store one bucket per each client
-    private Map<String, Bucket> buckets = new HashMap<>();
-
-    // Set the refill rate of bucket
-    // For example 5 tokens added every twenty seconds - this removes
-    // chance of appearance of extra token i.e if the burst takes more that 2 secs
-    // you get a new token available before the burst ends so it appears as if the user
-    // has 6 tokens
-
-    //token refill rate was slowed to 5 tokens every 120 seconds to test logging to return 429
-    private final double refillRate = 5.0 / 120000.0;
-
-    /*
-        Checks whether a request from a given client is allowed or not
-        synchronized prevents issues if multiple requests arrive from a client at the same time
-    */
-    @Override
-    public synchronized boolean isRequestAllowed(String clientId, int limit) {
-
-        // Get the current time
-        long now = System.currentTimeMillis();
-
-        // If this is the users first request,
-        // create a new bucket for them
-        // The bucket starts at full capacity
-        if (!buckets.containsKey(clientId)) {
-            buckets.put(clientId, new Bucket(limit, now));
+        // If this is the user's first request, start with a full bucket
+        if (tokensObj == null || lastRefillObj == null) {
+            tokens = limit;
+            lastRefillTime = now;
+        } else {
+            tokens = Double.parseDouble(tokensObj.toString());
+            lastRefillTime = Long.parseLong(lastRefillObj.toString());
         }
 
-        // Get client bucket
-        Bucket bucket = buckets.get(clientId);
-
-        // Get how much time has passed since their last refill
-        // and add the tokens back
-        long timePassed = now - bucket.lastRefillTime;
+        // Refill tokens based on time passed
+        long timePassed = now - lastRefillTime;
         double tokensToAdd = timePassed * refillRate;
+        tokens = Math.min(limit, tokens + tokensToAdd);
 
-        // refill the bucket, but make sure it does not go over the max cap
-        bucket.tokens = Math.min(limit, bucket.tokens + tokensToAdd);
+        // Update refill timestamp
+        lastRefillTime = now;
 
-        // update the refill timestamp to now
-        bucket.lastRefillTime = now;
+        boolean allowed = false;
 
-        // If the client has at least 1 token,
-        // allow the request and consume 1 token
-        if (bucket.tokens >= 1.0) {
-            bucket.tokens -= 1.0;
-            return true;
+        // Consume one token if available
+        if (tokens >= 1.0) {
+            tokens -= 1.0;
+            allowed = true;
         }
 
-        // otherwise reject the request
-        return false;
+        // Save updated bucket state to Redis
+        redisTemplate.opsForHash().put(key, TOKENS_FIELD, String.valueOf(tokens));
+        redisTemplate.opsForHash().put(key, LAST_REFILL_FIELD, String.valueOf(lastRefillTime));
+
+        // Remove inactive buckets automatically
+        redisTemplate.expire(key, BUCKET_TTL);
+
+        return allowed;
     }
 }
