@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gateway Metrics Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 16px; background: #f6f8fb; color: #111827; }
+        h1 { margin: 0 0 10px; }
+        .controls, .cards, .grid { display: grid; gap: 12px; }
+        .controls { grid-template-columns: 160px 120px 120px; align-items: end; margin-bottom: 12px; }
+        .cards { grid-template-columns: repeat(4, minmax(120px, 1fr)); margin-bottom: 12px; }
+        .grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+        .card, .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+        .metric { font-size: 22px; font-weight: 700; margin-top: 4px; }
+        .panel h3 { margin: 0 0 8px; font-size: 16px; }
+        label { font-size: 12px; display: block; margin-bottom: 3px; color: #6b7280; }
+        input, select, button { padding: 7px; border: 1px solid #d1d5db; border-radius: 6px; }
+        button { cursor: pointer; background: #111827; color: #fff; border: none; }
+        svg { width: 100%; height: 180px; background: #fafafa; border-radius: 6px; }
+        .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; margin-top: 6px; }
+        .dot { width: 10px; height: 10px; display: inline-block; border-radius: 50%; margin-right: 5px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border-bottom: 1px solid #e5e7eb; padding: 7px; text-align: left; }
+        tr:hover { background: #f3f4f6; cursor: pointer; }
+        .story { background: #eef2ff; border: 1px solid #c7d2fe; padding: 10px; border-radius: 8px; margin-bottom: 12px; }
+        .pie { width: 160px; height: 160px; border-radius: 50%; margin: 6px auto; }
+        .small { font-size: 12px; color: #4b5563; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>API Gateway Storytelling Dashboard</h1>
+    <div class="controls">
+        <div>
+            <label for="minutes">Window (minutes)</label>
+            <select id="minutes">
+                <option value="15">15</option>
+                <option value="30" selected>30</option>
+                <option value="60">60</option>
+                <option value="180">180</option>
+            </select>
+        </div>
+        <div>
+            <label for="riskLimit">Risk rows</label>
+            <input id="riskLimit" type="number" value="10" min="1" max="50" />
+        </div>
+        <button id="refreshBtn">Refresh</button>
+    </div>
+
+    <div class="story" id="storyBox">Loading story...</div>
+
+    <div class="cards">
+        <div class="card"><div>Total Requests</div><div id="totalReq" class="metric">-</div></div>
+        <div class="card"><div>Blocked Requests</div><div id="blockedReq" class="metric">-</div></div>
+        <div class="card"><div>Allowed Requests</div><div id="allowedReq" class="metric">-</div></div>
+        <div class="card"><div>Top Risk Score</div><div id="topRisk" class="metric">-</div></div>
+    </div>
+
+    <div class="grid">
+        <div class="panel">
+            <h3>Overall Request Trend</h3>
+            <svg id="overallTrend"></svg>
+        </div>
+        <div class="panel">
+            <h3>Status Distribution</h3>
+            <div id="statusPie" class="pie"></div>
+            <div id="statusLegend" class="legend"></div>
+        </div>
+        <div class="panel">
+            <h3>Status Trend (200/400/401/403/429/500)</h3>
+            <svg id="statusTrend"></svg>
+        </div>
+        <div class="panel">
+            <h3>Latency Trend (avg / p50 / p95)</h3>
+            <svg id="latencyTrend"></svg>
+        </div>
+        <div class="panel">
+            <h3>Blocking by Algorithm</h3>
+            <svg id="algoBars"></svg>
+        </div>
+        <div class="panel">
+            <h3>Risk Watchlist (click row for drill-down)</h3>
+            <table>
+                <thead><tr><th>Client</th><th>Req</th><th>403</th><th>429</th><th>5xx</th><th>Risk</th></tr></thead>
+                <tbody id="riskBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel" style="margin-top:12px;">
+        <h3>Client Drill-down</h3>
+        <div id="clientSummary" class="small">Select a risk row.</div>
+        <table>
+            <thead><tr><th>Time</th><th>Status</th><th>Latency</th><th>Decision</th><th>Reason</th><th>Path</th></tr></thead>
+            <tbody id="detailBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const colors = ["#2563eb", "#16a34a", "#dc2626", "#f59e0b", "#7c3aed", "#0891b2", "#ea580c"];
+        const statusColors = { "200":"#16a34a", "400":"#f59e0b", "401":"#f97316", "403":"#dc2626", "429":"#7c3aed", "500":"#111827" };
+
+        function esc(str) { return String(str ?? "").replace(/[<>&]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[s])); }
+
+        async function getJson(url) {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(`Failed ${url}`);
+            return r.json();
+        }
+
+        function drawLineChart(svgId, seriesList) {
+            const svg = document.getElementById(svgId);
+            const w = svg.clientWidth || 500, h = svg.clientHeight || 180, p = 20;
+            const maxY = Math.max(1, ...seriesList.flatMap(s => s.points.map(p => Number(p.y || 0))));
+            const maxX = Math.max(1, ...seriesList.map(s => s.points.length - 1));
+            let html = `<line x1="${p}" y1="${h-p}" x2="${w-p}" y2="${h-p}" stroke="#d1d5db"/>`;
+            html += `<line x1="${p}" y1="${p}" x2="${p}" y2="${h-p}" stroke="#d1d5db"/>`;
+            seriesList.forEach((s, idx) => {
+                const pts = s.points.map((pt, i) => {
+                    const x = p + (i * (w - 2*p) / maxX);
+                    const y = h - p - ((Number(pt.y || 0) / maxY) * (h - 2*p));
+                    return `${x},${y}`;
+                }).join(" ");
+                html += `<polyline fill="none" stroke="${s.color || colors[idx % colors.length]}" stroke-width="2" points="${pts}"/>`;
+            });
+            svg.innerHTML = html;
+        }
+
+        function drawBarChart(svgId, items) {
+            const svg = document.getElementById(svgId);
+            const w = svg.clientWidth || 500, h = svg.clientHeight || 180, p = 20;
+            const values = items.map(x => Number(x.value || 0));
+            const maxY = Math.max(1, ...values);
+            const barW = Math.max(16, (w - 2*p) / Math.max(1, items.length) - 8);
+            let html = `<line x1="${p}" y1="${h-p}" x2="${w-p}" y2="${h-p}" stroke="#d1d5db"/>`;
+            items.forEach((item, i) => {
+                const x = p + i * ((w - 2*p) / Math.max(1, items.length)) + 4;
+                const bh = (Number(item.value || 0) / maxY) * (h - 2*p);
+                const y = h - p - bh;
+                html += `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="${colors[i % colors.length]}"/>`;
+                html += `<text x="${x}" y="${h-4}" font-size="10">${esc(item.label).slice(0, 8)}</text>`;
+            });
+            svg.innerHTML = html;
+        }
+
+        function renderPie(distribution) {
+            const total = Object.values(distribution).reduce((a, b) => a + Number(b || 0), 0) || 1;
+            let acc = 0;
+            const stops = [];
+            const legend = [];
+            for (const [code, count] of Object.entries(distribution)) {
+                const pct = Number(count || 0) / total * 100;
+                const color = statusColors[code] || "#6b7280";
+                stops.push(`${color} ${acc}% ${acc + pct}%`);
+                acc += pct;
+                legend.push(`<span><span class="dot" style="background:${color}"></span>${code}: ${count}</span>`);
+            }
+            document.getElementById("statusPie").style.background = `conic-gradient(${stops.join(",")})`;
+            document.getElementById("statusLegend").innerHTML = legend.join("");
+        }
+
+        function buildStory(statusDist, algo, risk) {
+            const d = statusDist.distribution || {};
+            const errors5xx = Number(d["500"] || 0);
+            const blocks = Number(d["403"] || 0) + Number(d["429"] || 0);
+            const topRisk = risk.items?.[0];
+            if (errors5xx > blocks) {
+                return `Traffic shows more 5xx than abuse blocks. Likely backend instability, not client abuse.`;
+            }
+            if (blocks > errors5xx && blocks > 0) {
+                return `Block activity dominates failures. This looks more like abuse/rate-limit pressure than backend outage.`;
+            }
+            if (topRisk && Number(topRisk.riskScore) > 60) {
+                return `High-risk clients are approaching suspicious thresholds. Investigate top watchlist clients proactively.`;
+            }
+            return `System looks stable. Keep monitoring for spikes in 429/403 and 5xx to separate abuse from backend issues.`;
+        }
+
+        async function loadDashboard() {
+            const minutes = Number(document.getElementById("minutes").value || 30);
+            const riskLimit = Number(document.getElementById("riskLimit").value || 10);
+
+            const [snapshot, overall, statusTrend, statusDist, latency, algo, risk] = await Promise.all([
+                getJson("/metrics"),
+                getJson(`/metrics/dashboard/overall-trend?minutes=${minutes}`),
+                getJson(`/metrics/dashboard/status-trend?minutes=${minutes}`),
+                getJson(`/metrics/dashboard/status-distribution?minutes=${minutes}`),
+                getJson(`/metrics/dashboard/latency-trend?minutes=${minutes}`),
+                getJson(`/metrics/dashboard/algorithm-blocking?minutes=${minutes}`),
+                getJson(`/metrics/dashboard/risk-leaderboard?minutes=${minutes}&limit=${riskLimit}`)
+            ]);
+
+            document.getElementById("totalReq").textContent = snapshot.totalRequests ?? 0;
+            document.getElementById("blockedReq").textContent = snapshot.blockedRequests ?? 0;
+            document.getElementById("allowedReq").textContent = snapshot.allowedRequests ?? 0;
+            document.getElementById("topRisk").textContent = risk.items?.[0]?.riskScore ?? 0;
+            document.getElementById("storyBox").textContent = buildStory(statusDist, algo, risk);
+
+            drawLineChart("overallTrend", [{
+                name: "Requests",
+                color: "#2563eb",
+                points: (overall.points || []).map(p => ({ y: p.count }))
+            }]);
+
+            renderPie(statusDist.distribution || {});
+
+            const statusPoints = statusTrend.points || [];
+            const codes = ["200", "400", "401", "403", "429", "500"];
+            drawLineChart("statusTrend", codes.map(code => ({
+                name: code,
+                color: statusColors[code],
+                points: statusPoints.map(p => ({ y: (p.counts || {})[code] || 0 }))
+            })));
+
+            drawLineChart("latencyTrend", [
+                { name: "avg", color: "#0891b2", points: (latency.points || []).map(p => ({ y: p.avgMs })) },
+                { name: "p50", color: "#16a34a", points: (latency.points || []).map(p => ({ y: p.p50Ms })) },
+                { name: "p95", color: "#dc2626", points: (latency.points || []).map(p => ({ y: p.p95Ms })) }
+            ]);
+
+            const algoMap = algo.blockedByAlgorithm || {};
+            drawBarChart("algoBars", Object.entries(algoMap).map(([label, value]) => ({ label, value })));
+
+            const riskBody = document.getElementById("riskBody");
+            riskBody.innerHTML = "";
+            (risk.items || []).forEach(item => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td class="mono">${esc(item.client)}</td><td>${item.requestCount}</td><td>${item.status403}</td><td>${item.status429}</td><td>${item.status5xx}</td><td>${item.riskScore}</td>`;
+                tr.addEventListener("click", () => loadClientDetail(item.apiKey, item.ip, minutes));
+                riskBody.appendChild(tr);
+            });
+        }
+
+        async function loadClientDetail(apiKey, ip, minutes) {
+            const detail = await getJson(`/metrics/dashboard/client-detail?apiKey=${encodeURIComponent(apiKey)}&ip=${encodeURIComponent(ip)}&minutes=${minutes}&limit=30`);
+            document.getElementById("clientSummary").innerHTML =
+                `<span class="mono">${esc(detail.client)}</span> | requests=${detail.requestCount} | blocked=${detail.blockedCount} | avg latency=${detail.avgLatencyMs}ms`;
+            const body = document.getElementById("detailBody");
+            body.innerHTML = "";
+            (detail.recentEvents || []).forEach(e => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td>${esc(e.timestamp)}</td><td>${esc(e.statusCode)}</td><td>${esc(e.latencyMs)}ms</td><td>${esc(e.decision)}</td><td>${esc(e.reason)}</td><td class="mono">${esc(e.path)}</td>`;
+                body.appendChild(tr);
+            });
+        }
+
+        document.getElementById("refreshBtn").addEventListener("click", loadDashboard);
+        loadDashboard().catch(err => {
+            document.getElementById("storyBox").textContent = "Failed to load dashboard data: " + err.message;
+        });
+    </script>
+</body>
+</html>

@@ -37,7 +37,7 @@ public class LoggingFilter extends OncePerRequestFilter {
 
     //paths excluded from logging so browser generated requests dont pollute the metrics data
     private static final java.util.List<String> EXCLUDED_PATHS =
-            java.util.List.of("/health", "/metrics", "/metrics/logs", "/favicon.ico");
+            java.util.List.of("/health", "/favicon.ico");
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -46,7 +46,8 @@ public class LoggingFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         //skips logging for internal/static paths
-        if (EXCLUDED_PATHS.contains(request.getRequestURI())) {
+        String uri = request.getRequestURI();
+        if (isExcluded(uri)) {
             chain.doFilter(request, response);
             return;
         }
@@ -57,7 +58,8 @@ public class LoggingFilter extends OncePerRequestFilter {
 
         //grab request info
         String apiKey = request.getHeader("X-API-Key");
-        String path   = request.getRequestURI();
+        String path   = uri;
+        long startNs  = System.nanoTime();
 
         if (apiKey == null || apiKey.isBlank()) {
             apiKey = "MISSING";
@@ -70,8 +72,10 @@ public class LoggingFilter extends OncePerRequestFilter {
         //records IP for bot detection
         botDetector.record(ip);
         if (botDetector.isSuspicious(ip)) {
+            wrappedResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
             requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm);
-            metricsService.recordRequest(apiKey, true);
+            long latencyMs = (System.nanoTime() - startNs) / 1_000_000L;
+            metricsService.recordRequest(apiKey, ip, path, HttpServletResponse.SC_FORBIDDEN, latencyMs, algorithm, "BLOCKED", "suspected_bot");
             wrappedResponse.copyBodyToResponse();
             return;
         }
@@ -81,6 +85,7 @@ public class LoggingFilter extends OncePerRequestFilter {
 
         //now we can always read the real status code
         int status = wrappedResponse.getStatus();
+        long latencyMs = (System.nanoTime() - startNs) / 1_000_000L;
 
         String decision;
         String reason;
@@ -104,10 +109,16 @@ public class LoggingFilter extends OncePerRequestFilter {
 
         //records the full request details in the log and update the metrics counters
         requestLogger.log(apiKey, ip, path, decision, reason, algorithm);
-        metricsService.recordRequest(apiKey, wasBlocked);
+        metricsService.recordRequest(apiKey, ip, path, status, latencyMs, algorithm, decision, reason);
 
         //copies the response body back so the client still receives it
         //(ContentCachingResponseWrapper holds it in memory)
         wrappedResponse.copyBodyToResponse();
+    }
+
+    private boolean isExcluded(String path) {
+        return EXCLUDED_PATHS.contains(path)
+                || path.startsWith("/metrics")
+                || path.startsWith("/dashboard");
     }
 }

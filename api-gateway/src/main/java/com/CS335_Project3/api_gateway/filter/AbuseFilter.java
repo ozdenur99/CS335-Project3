@@ -34,7 +34,7 @@ public class AbuseFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AbuseFilter.class);
     //added new excluded paths for logging testing
-    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics", "/metrics/logs", "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv", "/metrics/suspicious");
+    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/favicon.ico", "/dashboard", "/dashboard.html");
 
     // private final Spike spike;
     private final Failure failure;
@@ -56,7 +56,7 @@ public class AbuseFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
 
         // Step 1: Skip excluded paths
-        if (EXCLUDED_PATHS.contains(path)) {
+        if (isExcluded(path)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -124,5 +124,11 @@ public class AbuseFilter extends OncePerRequestFilter {
                 "{\"status\":%d,\"error\":\"%s\",\"message\":\"%s\",\"path\":\"%s\"}",
                 status, error, message, request.getRequestURI()
         ));
+    }
+
+    private boolean isExcluded(String path) {
+        return EXCLUDED_PATHS.contains(path)
+                || path.startsWith("/metrics")
+                || path.startsWith("/dashboard");
     }
 }

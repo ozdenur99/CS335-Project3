@@ -110,4 +110,58 @@ public class MetricsController {
     public Set<String> getSuspiciousIps() {
         return botDetector.getSuspiciousIps();
     }
+
+    //GET /metrics/dashboard/overall-trend?minutes=60
+    @GetMapping("/dashboard/overall-trend")
+    public Map<String, Object> getOverallTrend(@RequestParam(defaultValue = "60") int minutes) {
+        return metricsService.getOverallTrend(minutes);
+    }
+
+    //GET /metrics/dashboard/client-trend?apiKey=dev-key-token&ip=127.0.0.1&minutes=60
+    @GetMapping("/dashboard/client-trend")
+    public Map<String, Object> getClientTrend(@RequestParam String apiKey,
+                                              @RequestParam String ip,
+                                              @RequestParam(defaultValue = "60") int minutes) {
+        return metricsService.getClientTrend(apiKey, ip, minutes);
+    }
+
+    //GET /metrics/dashboard/status-trend?minutes=60
+    @GetMapping("/dashboard/status-trend")
+    public Map<String, Object> getStatusTrend(@RequestParam(defaultValue = "60") int minutes) {
+        return metricsService.getStatusTrend(minutes);
+    }
+
+    //GET /metrics/dashboard/status-distribution?minutes=60
+    @GetMapping("/dashboard/status-distribution")
+    public Map<String, Object> getStatusDistribution(@RequestParam(defaultValue = "60") int minutes) {
+        return metricsService.getStatusDistribution(minutes);
+    }
+
+    //GET /metrics/dashboard/latency-trend?minutes=60
+    @GetMapping("/dashboard/latency-trend")
+    public Map<String, Object> getLatencyTrend(@RequestParam(defaultValue = "60") int minutes) {
+        return metricsService.getLatencyTrend(minutes);
+    }
+
+    //GET /metrics/dashboard/algorithm-blocking?minutes=60
+    @GetMapping("/dashboard/algorithm-blocking")
+    public Map<String, Object> getAlgorithmBlocking(@RequestParam(defaultValue = "60") int minutes) {
+        return metricsService.getAlgorithmBlockingComparison(minutes);
+    }
+
+    //GET /metrics/dashboard/risk-leaderboard?minutes=30&limit=20
+    @GetMapping("/dashboard/risk-leaderboard")
+    public Map<String, Object> getRiskLeaderboard(@RequestParam(defaultValue = "30") int minutes,
+                                                  @RequestParam(defaultValue = "20") int limit) {
+        return metricsService.getRiskLeaderboard(minutes, limit);
+    }
+
+    //GET /metrics/dashboard/client-detail?apiKey=dev-key-token&ip=127.0.0.1&minutes=60&limit=50
+    @GetMapping("/dashboard/client-detail")
+    public Map<String, Object> getClientDetail(@RequestParam String apiKey,
+                                               @RequestParam String ip,
+                                               @RequestParam(defaultValue = "60") int minutes,
+                                               @RequestParam(defaultValue = "50") int limit) {
+        return metricsService.getClientDetail(apiKey, ip, minutes, limit);
+    }
 }

@@ -451,6 +451,14 @@ All endpoints below require no API key.
 | `GET /metrics/logs/export/json` | Download all logs as a JSON file |
 | `GET /metrics/logs/export/csv` | Download all logs as a CSV file |
 | `GET /metrics/suspicious` | List of IPs flagged as potential bots |
+| `GET /metrics/dashboard/overall-trend?minutes=60` | Overall request count trend (time series) |
+| `GET /metrics/dashboard/client-trend?apiKey=...&ip=...&minutes=60` | Per-client request trend (drill-down ready) |
+| `GET /metrics/dashboard/status-trend?minutes=60` | Time-series status split (200/400/401/403/429/500) |
+| `GET /metrics/dashboard/status-distribution?minutes=60` | Status code distribution for selected window |
+| `GET /metrics/dashboard/latency-trend?minutes=60` | Latency trend (avg/p50/p95) |
+| `GET /metrics/dashboard/algorithm-blocking?minutes=60` | Blocking frequency grouped by algorithm and reason |
+| `GET /metrics/dashboard/risk-leaderboard?minutes=30&limit=10` | Clients near suspicious/blocking limits |
+| `GET /metrics/dashboard/client-detail?apiKey=...&ip=...` | Client drill-down with recent events |
 
 ### Example `/metrics` response
 ```json
@@ -494,6 +502,7 @@ All endpoints below require no API key.
 ```
 http://localhost:8080/metrics
 http://localhost:8080/metrics/logs
+http://localhost:8080/dashboard.html
 ```
 To check any suspicious bot IPs
 ```
@@ -541,6 +550,23 @@ Downloads a `logs.json` file with all current log entries.
 http://localhost:8080/metrics/logs/export/csv
 ```
 Downloads a `logs.csv` file that can be opened in Excel or any spreadsheet app.
+
+---
+
+## 6. Dashboard View (Storytelling)
+
+Open:
+```
+http://localhost:8080/dashboard.html
+```
+
+Dashboard includes:
+- Overall request trend graph
+- Status distribution pie + status trend graph (200/400/401/403/429/500)
+- Latency trend graph (avg/p50/p95)
+- Blocking by algorithm bar chart
+- Risk leaderboard and clickable per-client drill-down
+- Story box that helps distinguish backend issues (5xx) vs abuse pressure (403/429)
 
 ---
 
