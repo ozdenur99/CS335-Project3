@@ -24,6 +24,7 @@
         th, td { border-bottom: 1px solid #e5e7eb; padding: 7px; text-align: left; }
         tr:hover { background: #f3f4f6; cursor: pointer; }
         .story { background: #eef2ff; border: 1px solid #c7d2fe; padding: 10px; border-radius: 8px; margin-bottom: 12px; }
+        .error-banner { background:#fee2e2; border:1px solid #fecaca; color:#991b1b; padding:10px; border-radius:8px; margin-bottom:12px; display:none; }
         .pie { width: 160px; height: 160px; border-radius: 50%; margin: 6px auto; }
         .small { font-size: 12px; color: #4b5563; }
         .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
@@ -86,6 +87,7 @@
         <button id="refreshBtn">Refresh</button>
     </div>
 
+    <div class="error-banner" id="errorBanner"></div>
     <div class="story" id="storyBox">Loading story...</div>
 
     <div class="cards">
@@ -224,6 +226,9 @@
         }
 
         async function loadDashboard() {
+            const errorBanner = document.getElementById("errorBanner");
+            errorBanner.style.display = "none";
+            errorBanner.textContent = "";
             const minutes = Number(document.getElementById("minutes").value || 30);
             const riskLimit = Number(document.getElementById("riskLimit").value || 10);
             const tenantId = document.getElementById("tenantId").value.trim();
@@ -315,6 +320,10 @@
 
         document.getElementById("refreshBtn").addEventListener("click", loadDashboard);
         loadDashboard().catch(err => {
+            console.error("Dashboard load failed", err);
+            const errorBanner = document.getElementById("errorBanner");
+            errorBanner.style.display = "block";
+            errorBanner.textContent = "Dashboard refresh failed: " + err.message;
             document.getElementById("storyBox").textContent = "Failed to load dashboard data: " + err.message;
         });
     </script>

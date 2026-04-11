@@ -2,6 +2,8 @@ package com.CS335_Project3.api_gateway.metrics;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -17,6 +19,7 @@ import java.util.stream.Collectors;
 //@Component makes Spring create one single instance shared across the whole app
 @Component
 public class MetricsService {
+    private static final Logger log = LoggerFactory.getLogger(MetricsService.class);
 
     private static final String EVENTS_ZSET = "metrics:events";
     private static final String TOTAL_KEY = "metrics:total";
@@ -589,6 +592,7 @@ public class MetricsService {
                     appId
             );
         } catch (Exception ex) {
+            log.warn("Failed to parse metric event payload: {}", raw, ex);
             return null;
         }
     }
