@@ -30,6 +30,11 @@ public class MetricsService {
     private static final String BLOCKED_BY_ALGORITHM_HASH = "metrics:blocked:algorithm";
     private static final String BLOCKED_BY_REASON_HASH = "metrics:blocked:reason";
     private static final long RAW_EVENT_RETENTION_MS = 24L * 60L * 60L * 1000L;
+    private static final int EXPECTED_EVENT_FIELDS = 9;
+    private static final double RISK_VELOCITY_THRESHOLD = 50.0;
+    private static final double RISK_VELOCITY_WEIGHT = 40.0;
+    private static final double RISK_FAILURE_WEIGHT = 35.0;
+    private static final double RISK_BLOCK_WEIGHT = 25.0;
     private static final List<Integer> DASHBOARD_STATUS_CODES = List.of(200, 400, 401, 403, 429, 500);
 
     private final StringRedisTemplate redisTemplate;
@@ -305,10 +310,12 @@ public class MetricsService {
     }
 
     private Map<String, Object> buildRiskRow(ClientRiskStats stats, int windowMinutes) {
-        double velocityRatio = Math.min(1.0, stats.total / 50.0);
+        double velocityRatio = Math.min(1.0, stats.total / RISK_VELOCITY_THRESHOLD);
         double blockRatio = stats.total == 0 ? 0.0 : (double) stats.blocked / stats.total;
         double failureRatio = stats.total == 0 ? 0.0 : (double) (stats.forbidden403 + stats.rateLimited429 + stats.serverErrors5xx) / stats.total;
-        double risk = (velocityRatio * 40.0) + (failureRatio * 35.0) + (blockRatio * 25.0);
+        double risk = (velocityRatio * RISK_VELOCITY_WEIGHT)
+                + (failureRatio * RISK_FAILURE_WEIGHT)
+                + (blockRatio * RISK_BLOCK_WEIGHT);
         risk = Math.min(100.0, risk);
 
         List<String> reasons = new ArrayList<>();
@@ -418,7 +425,8 @@ public class MetricsService {
         if (value == null || value.isBlank()) {
             return "UNKNOWN";
         }
-        return value.replace("|", "_").trim();
+        // Pipe/newline characters interfere with delimiter-based event parsing, so sanitize them.
+        return value.replace("|", "_").replace("\n", " ").replace("\r", " ").trim();
     }
 
     private static long parseLong(String value) {
@@ -472,8 +480,8 @@ public class MetricsService {
     }
 
     private static MetricEvent parseEvent(String raw) {
-        String[] parts = raw.split("\\|", 9);
-        if (parts.length != 9) {
+        String[] parts = raw.split("\\|", EXPECTED_EVENT_FIELDS);
+        if (parts.length != EXPECTED_EVENT_FIELDS) {
             return null;
         }
         try {
