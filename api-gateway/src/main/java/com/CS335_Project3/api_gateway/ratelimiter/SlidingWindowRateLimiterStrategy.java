@@ -2,6 +2,7 @@ package com.CS335_Project3.api_gateway.ratelimiter;
 
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Duration;
@@ -42,14 +43,12 @@ public class SlidingWindowRateLimiterStrategy implements RateLimiterStrategy {
     private final long windowSizeMs = 10000;
 
     /*
-        TTL for Redis key.
+        TTL for Redis key is now loaded from application.properties.
 
-        Slightly longer than window size so both current and previous
-        window data are preserved.
-
-        After inactivity, the key is automatically removed.
+        This makes it easier to adjust for demo/testing without changing code.
     */
-    private static final Duration WINDOW_TTL = Duration.ofSeconds(20);
+    @Value("${rate-limit.redis.sliding.ttl-seconds:120}")
+    private long ttlSeconds;
 
     /*
         Redis template for interacting with Redis
@@ -95,12 +94,12 @@ public class SlidingWindowRateLimiterStrategy implements RateLimiterStrategy {
             previousCount = 0;
             windowStart = now;
 
-            // WRITE INITIAL STATE IMMEDIATELY
+            // Write initial state immediately
             redisTemplate.opsForHash().put(key, CURRENT_FIELD, "0");
             redisTemplate.opsForHash().put(key, PREVIOUS_FIELD, "0");
             redisTemplate.opsForHash().put(key, WINDOW_START_FIELD, String.valueOf(now));
-            redisTemplate.expire(key, WINDOW_TTL);
-        }else {
+            redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));
+        } else {
             currentCount = Integer.parseInt(currentObj.toString());
             previousCount = Integer.parseInt(previousObj.toString());
             windowStart = Long.parseLong(windowStartObj.toString());
@@ -152,7 +151,7 @@ public class SlidingWindowRateLimiterStrategy implements RateLimiterStrategy {
         /*
             Set expiry so inactive clients are cleaned up automatically
         */
-        redisTemplate.expire(key, WINDOW_TTL);
+        redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));
 
         return allowed;
     }

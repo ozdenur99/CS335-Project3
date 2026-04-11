@@ -3,6 +3,7 @@ package com.CS335_Project3.api_gateway.ratelimiter;
 import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -22,7 +23,14 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
     private static final String KEY_PREFIX = "rate_limit:token:";
     private static final String TOKENS_FIELD = "tokens";
     private static final String LAST_REFILL_FIELD = "lastRefillTime";
-    private static final Duration BUCKET_TTL = Duration.ofSeconds(120);
+
+    /*
+        TTL for Redis key is now loaded from application.properties.
+
+        This makes it easier to adjust for demo/testing without changing code.
+    */
+    @Value("${rate-limit.redis.token.ttl-seconds:120}")
+    private long ttlSeconds;
 
     private final StringRedisTemplate redisTemplate;
 
@@ -76,7 +84,7 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
         redisTemplate.opsForHash().put(key, LAST_REFILL_FIELD, String.valueOf(lastRefillTime));
 
         // Remove inactive buckets automatically
-        redisTemplate.expire(key, BUCKET_TTL);
+        redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));
 
         return allowed;
     }
