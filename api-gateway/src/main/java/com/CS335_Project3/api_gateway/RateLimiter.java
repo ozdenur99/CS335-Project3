@@ -191,9 +191,9 @@ public class RateLimiter {
          * Example: "tenant-acme/dashboard"
          * This allows existing strategies to isolate state without code changes.
          */
-        String bucketKey = (tenantId != null && appId != null) 
-            ? tenantId + "/" + appId 
-            : clientId;
+        String bucketKey = (tenantId != null && !tenantId.isBlank() && appId != null && !appId.isBlank())
+                    ? tenantId + "/" + appId
+                    : clientId;
 
         return strategy.isRequestAllowed(bucketKey, resolvedLimit);
     }

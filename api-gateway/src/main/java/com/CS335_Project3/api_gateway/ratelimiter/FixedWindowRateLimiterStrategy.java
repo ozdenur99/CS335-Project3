@@ -3,6 +3,7 @@ package com.CS335_Project3.api_gateway.ratelimiter;
 import java.time.Duration;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -12,8 +13,13 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
     // Window size = 10 seconds
     private static final long windowSizeMs = 10000;
 
-    // TTL used by Redis (same as window size)
-    private static final Duration windowTTL = Duration.ofMillis(windowSizeMs);
+    /*
+        TTL for Redis key is now loaded from application.properties.
+
+        This makes it easier to adjust for demo/testing without changing code.
+    */
+    @Value("${rate-limit.redis.fixed.ttl-seconds:120}")
+    private long ttlSeconds;
 
     // Prefix for Redis keys (one key per client)
     private static final String KEY_PREFIX = "rate_limit:fixed:";
@@ -47,7 +53,7 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
 
         // First request in this window -> set expiry
         if (count == 1L) {
-            redisTemplate.expire(key, windowTTL);
+            redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));
         }
 
         // Allow request if still under limit
