@@ -15,9 +15,9 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
 
        Concept:
        Each client has a bucket that contains tokens.
-       every request they make uses up one token.
-       Tokens are added back over time at a fixed refill rate
-       If the bucket has no tokens left then the request is rejected
+       Every request they make uses up one token.
+       Tokens are added back over time at a fixed refill rate.
+       If the bucket has no tokens left then the request is rejected.
     */
 
     private static final String KEY_PREFIX = "rate_limit:token:";
@@ -25,17 +25,29 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
     private static final String LAST_REFILL_FIELD = "lastRefillTime";
 
     /*
-        TTL for Redis key is now loaded from application.properties.
+        TTL for Redis key is loaded from application.properties.
 
         This makes it easier to adjust for demo/testing without changing code.
     */
     @Value("${rate-limit.redis.token.ttl-seconds:120}")
     private long ttlSeconds;
 
-    private final StringRedisTemplate redisTemplate;
+    /*
+        Token refill behaviour is loaded from application.properties.
 
-    // token refill rate was slowed to 5 tokens every 120 seconds to test logging to return 429
-    private final double refillRate = 5.0 / 120000.0;
+        refillTokens     = how many tokens are restored
+        refillPeriodMs   = over what time period they are restored
+
+        Example:
+        5 tokens every 120000 ms = 5 tokens every 120 seconds
+    */
+    @Value("${rate-limit.token.refill-tokens:5}")
+    private double refillTokens;
+
+    @Value("${rate-limit.token.refill-period-ms:120000}")
+    private long refillPeriodMs;
+
+    private final StringRedisTemplate redisTemplate;
 
     @Autowired
     public TokenBucketRateLimiterStrategy(StringRedisTemplate redisTemplate) {
@@ -53,6 +65,9 @@ public class TokenBucketRateLimiterStrategy implements RateLimiterStrategy {
 
         double tokens;
         long lastRefillTime;
+
+        // Calculate refill rate from configuration
+        double refillRate = refillTokens / refillPeriodMs;
 
         // If this is the user's first request, start with a full bucket
         if (tokensObj == null || lastRefillObj == null) {

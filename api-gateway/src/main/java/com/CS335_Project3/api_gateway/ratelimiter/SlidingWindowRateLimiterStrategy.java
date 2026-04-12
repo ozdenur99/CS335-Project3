@@ -38,9 +38,12 @@ public class SlidingWindowRateLimiterStrategy implements RateLimiterStrategy {
     private static final String WINDOW_START_FIELD = "windowStart";
 
     /*
-        Window size (10 seconds for testing/demo purposes)
+        Window size is now loaded from application.properties.
+
+        This controls how long each sliding window lasts.
     */
-    private final long windowSizeMs = 10000;
+    @Value("${rate-limit.sliding.window-ms:10000}")
+    private long windowSizeMs;
 
     /*
         TTL for Redis key is now loaded from application.properties.
