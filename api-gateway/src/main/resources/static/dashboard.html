@@ -203,7 +203,7 @@
                 const bh = (Number(item.value || 0) / maxY) * (h - 2*p);
                 const y = h - p - bh;
                 html += `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" fill="${colors[i % colors.length]}"/>`;
-                html += `<text x="${x}" y="${h-4}" font-size="10">${esc(item.label).slice(0, 8)}</text>`;
+                html += `<text x="${x}" y="${h-4}" font-size="10">${esc(item.label)}</text>`;
             });
             svg.innerHTML = html;
         }
