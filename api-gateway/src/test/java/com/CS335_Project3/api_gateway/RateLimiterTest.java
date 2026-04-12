@@ -4,6 +4,7 @@ import com.CS335_Project3.api_gateway.config.TenantRateLimitConfig;
 import com.CS335_Project3.api_gateway.ratelimiter.TokenBucketRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.SlidingWindowRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.LeakyBucketRateLimiterStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,8 +23,10 @@ class RateLimiterTest {
         TokenBucketRateLimiterStrategy token = mock(TokenBucketRateLimiterStrategy.class);
         FixedWindowRateLimiterStrategy fixed = mock(FixedWindowRateLimiterStrategy.class);
         SlidingWindowRateLimiterStrategy sliding = mock(SlidingWindowRateLimiterStrategy.class);
-        
+        LeakyBucketRateLimiterStrategy leaky = mock(LeakyBucketRateLimiterStrategy.class);  
+
         TenantRateLimitConfig config = new TenantRateLimitConfig();
+        
         config.setDefaultLimit(3);
         config.setDefaultAlgorithm("token");
 
@@ -37,7 +40,7 @@ class RateLimiterTest {
             return next <= limit;
         });
 
-        rateLimiter = new RateLimiter(token, fixed, sliding, config);
+        rateLimiter = new RateLimiter(token, fixed, sliding, leaky, config);
     }
 
     @Test
