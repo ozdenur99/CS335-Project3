@@ -9,7 +9,7 @@
         h1 { margin: 0 0 10px; }
         .controls, .cards, .grid { display: grid; gap: 12px; }
         .controls { grid-template-columns: repeat(8, minmax(120px, 1fr)); align-items: end; margin-bottom: 12px; }
-        .cards { grid-template-columns: repeat(4, minmax(120px, 1fr)); margin-bottom: 12px; }
+        .cards { grid-template-columns: repeat(5, minmax(120px, 1fr)); margin-bottom: 12px; }
         .grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
         .card, .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
         .metric { font-size: 22px; font-weight: 700; margin-top: 4px; }
@@ -94,6 +94,7 @@
         <div class="card"><div>Total Requests</div><div id="totalReq" class="metric">-</div></div>
         <div class="card"><div>Blocked Requests</div><div id="blockedReq" class="metric">-</div></div>
         <div class="card"><div>Allowed Requests</div><div id="allowedReq" class="metric">-</div></div>
+        <div class="card"><div>Unauthorized (401)</div><div id="unauthorizedReq" class="metric">-</div></div>
         <div class="card"><div>Top Risk Score</div><div id="topRisk" class="metric">-</div></div>
     </div>
 
@@ -140,7 +141,7 @@
     <div class="panel" style="margin-top:12px;">
         <h3>Filtered Event Feed</h3>
         <table>
-            <thead><tr><th>Time</th><th>Tenant</th><th>App</th><th>API Key</th><th>IP</th><th>Status</th><th>Algo</th><th>Decision</th><th>Path</th></tr></thead>
+            <thead><tr><th>Time</th><th>Tenant</th><th>App</th><th>API Key</th><th>IP</th><th>Status</th><th>Latency</th><th>Algo</th><th>Decision</th><th>Reason</th><th>Path</th></tr></thead>
             <tbody id="eventsBody"></tbody>
         </table>
     </div>
@@ -259,6 +260,7 @@
             document.getElementById("totalReq").textContent = snapshot.totalRequests ?? 0;
             document.getElementById("blockedReq").textContent = snapshot.blockedRequests ?? 0;
             document.getElementById("allowedReq").textContent = snapshot.allowedRequests ?? 0;
+            document.getElementById("unauthorizedReq").textContent = statusDist.distribution?.["401"] ?? 0;
             document.getElementById("topRisk").textContent = risk.items?.[0]?.riskScore ?? 0;
             document.getElementById("storyBox").textContent = buildStory(statusDist, algo, risk);
 
@@ -300,7 +302,7 @@
             eventsBody.innerHTML = "";
             (events.items || []).forEach(e => {
                 const tr = document.createElement("tr");
-                tr.innerHTML = `<td>${esc(e.timestamp)}</td><td>${esc(e.tenantId)}</td><td>${esc(e.appId)}</td><td class="mono">${esc(e.apiKey)}</td><td>${esc(e.ip)}</td><td>${esc(e.statusCode)}</td><td>${esc(e.algorithm)}</td><td>${esc(e.decision)}</td><td class="mono">${esc(e.path)}</td>`;
+                tr.innerHTML = `<td>${esc(e.timestamp)}</td><td>${esc(e.tenantId)}</td><td>${esc(e.appId)}</td><td class="mono">${esc(e.apiKey)}</td><td>${esc(e.ip)}</td><td>${esc(e.statusCode)}</td><td>${esc(e.latencyMs)}ms</td><td>${esc(e.algorithm)}</td><td>${esc(e.decision)}</td><td>${esc(e.reason)}</td><td class="mono">${esc(e.path)}</td>`;
                 eventsBody.appendChild(tr);
             });
         }
