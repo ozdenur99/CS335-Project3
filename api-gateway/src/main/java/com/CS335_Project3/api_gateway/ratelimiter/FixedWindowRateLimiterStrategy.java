@@ -10,15 +10,33 @@ import org.springframework.stereotype.Component;
 @Component
 public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
 
-    // Window size = 10 seconds
-    private static final long windowSizeMs = 10000;
+    /*
+        Fixed window rate limiter.
+
+        Concept:
+        Each client has a counter for the current time window.
+
+        Requests are counted inside that fixed window.
+        When the window expires, the key is removed and a new window starts.
+
+        This version stores the counter in Redis so it works across
+        multiple instances (e.g. Docker containers).
+    */
 
     /*
-        TTL for Redis key is now loaded from application.properties.
+        Window size is now loaded from application.properties.
 
         This makes it easier to adjust for demo/testing without changing code.
     */
-    @Value("${rate-limit.redis.fixed.ttl-seconds:120}")
+    @Value("${rate-limit.fixed.window-ms:10000}")
+    private long windowSizeMs;
+
+    /*
+        TTL for Redis key is also loaded from application.properties.
+
+        For fixed window, this should normally match the window length.
+    */
+    @Value("${rate-limit.redis.fixed.ttl-seconds:10}")
     private long ttlSeconds;
 
     // Prefix for Redis keys (one key per client)
@@ -51,7 +69,12 @@ public class FixedWindowRateLimiterStrategy implements RateLimiterStrategy {
             return false;
         }
 
-        // First request in this window -> set expiry
+        /*
+            First request in this window -> set expiry
+
+            Once the window expires, Redis removes the key automatically
+            and the next request starts a fresh counter.
+        */
         if (count == 1L) {
             redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));
         }
