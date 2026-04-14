@@ -120,6 +120,7 @@ public class RateLimiter {
         clientAlgorithms.put("dev-key-business", "token");
 
         // limit also lowered from 10 to 6 for testing purposes
+
         // to trigger 429 without sending too many requests for logging
         clientLimits.put("dev-key-business", 6);
     }
