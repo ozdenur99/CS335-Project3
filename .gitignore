@@ -32,8 +32,9 @@ build/
 ### VS Code ###
 .vscode/
 # Sensitive config
-src/main/resources/application.properties
-src/main/resources/application-local.properties
+**/src/main/resources/application.properties
+api-gateway/src/main/resources/application.properties
+api-gateway/src/main/resources/application-local.properties
 
 # Logs
 *.log
