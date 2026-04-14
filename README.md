@@ -198,7 +198,7 @@ http://localhost:8081/hello
 
 --------------------------------------------------
 
-TERMINAL 2 — START API GATEWAY
+TERMINAL 2  START API GATEWAY
 
 (Open new terminal)
 
@@ -278,17 +278,19 @@ HOW IT WORKS
 
 ---
 
-## Logging & Metrics
+## Logging & Metrics Module
 > Added by Mateo
 
-It Records every request passing through the gateway and tracks whether it was allowed or blocked. Results are viewable at `/metrics` for live counts and `/metrics/logs` for the last 100 requests
+Records every request passing through the gateway and tracks whether it was allowed or blocked. Results are viewable at `/metrics` for live counts and `/metrics/logs` for the last 100 requests
 
-It sits at the outermost layer of the filter chain (`@Order(1)`) and wraps all requests that come through the gateway. It captures: timestamp, API key, client IP, path, decision (ALLOWED/BLOCKED), reason, and which rate limiting algorithm was used. It also includes bot detection which automatically flags IPs that exceed 50 requests (number of requests can be changed)
+It sits at the outermost layer of the filter chain (`@Order(1)`) and wraps all requests that come through the gateway. It captures and displays: timestamp, API key, client IP, path, decision (ALLOWED/BLOCKED), reason, and which rate limiting algorithm was used
+
+It also includes bot detection which automatically flags IPs that exceed 50 requests (threshold can be changed in `BotDetector.java`)
 
 ---
 
-
 ### Files
+
 | File | Description |
 |------|-------------|
 | `LogEntry.java` | Data model for a single request log record |
@@ -297,33 +299,34 @@ It sits at the outermost layer of the filter chain (`@Order(1)`) and wraps all r
 | `MetricsController.java` | REST endpoints to expose metrics, logs, filters, and exports |
 | `LoggingFilter.java` | Filter chain wrapper that records every request outcome |
 | `BotDetector.java` | Flags IPs that exceed the suspicious request threshold |
+| `LogForwarder.java` | Forwards every log entry to the backend in real time |
+| `MetricsExporter.java` | Auto-exports metrics snapshot to a JSON file every hour |
 
 ---
-## Logging & Metrics TEST Instructions:
 
-### Starting the Services
+## Starting the Services
 
-Both services must be running simultaneously. Always start the backend first.
+Both the backend and gateway must be running simultaneously. Always start the backend first. Redis must also be running as it is required by the rate limiter
 
-**Start the Backend**
+**Terminal 1: Start Redis (from project root)**
+```bash
+docker compose up redis
+```
+Wait until you see `Ready to accept connections tcp` then press **d** to detach
+
+**Terminal 2: Start the Backend**
 ```bash
 cd backend-service
 ./mvnw spring-boot:run
 ```
-Wait until you see:
-```
-Tomcat started on port 8081
-```
+Wait until you see `Tomcat started on port 8081`
 
-**Start the API Gateway**
+**Terminal 3: Start the Gateway**
 ```bash
 cd api-gateway
 ./mvnw spring-boot:run
 ```
-Wait until you see:
-```
-Tomcat started on port 8080
-```
+Wait until you see `Tomcat started on port 8080`
 
 ---
 
@@ -336,23 +339,19 @@ Tomcat started on port 8080
 | `dev-key-sliding` | Sliding Window | 3 req/window |
 | `dev-key-business` | Token Bucket | 10 req/window |
 
-> **Note:** Limits are temporarily set to 3 for testing. Will be restored to 5 before final submission.
+> **Note:** Limits are temporarily set to 3 for testing (can be modified)
 
 ---
 
 ## Sending Test Requests
 
-### PowerShell
-
-If PowerShell shows a security warning, press **A (Yes to All)** to continue.
+If PowerShell shows a security warning, press **A (Yes to All)** to continue
 
 **Valid Request (expect 200)**
 ```powershell
 curl -Uri "http://localhost:8080/api/test123/notes" -Headers @{"X-API-Key"="dev-key-token"}
 ```
 Expected result: request passes through to the backend and returns `[]`
-
----
 
 **Invalid API Key (expect 401)**
 ```powershell
@@ -362,8 +361,6 @@ Expected result:
 ```json
 {"status":401,"error":"Unauthorized","message":"Request could not be authorised.","path":"/api/test123/notes"}
 ```
-
----
 
 **Burst Requests to Trigger Rate Limit (expect 429 after 3rd request)**
 ```powershell
@@ -377,9 +374,7 @@ Expected result:
     }
 }
 ```
-Expected result: first 3 requests return 200, remaining return 429.
-
----
+Expected result: first 3 requests return 200, remaining return 429
 
 **Abuse Detection (expect 403)**
 ```powershell
@@ -393,9 +388,7 @@ Expected result: first 3 requests return 200, remaining return 429.
     }
 }
 ```
-Expected result: returns 403 around request 12 once the abuse detection threshold is hit.
-
----
+Expected result: returns 403 around request 12 once the abuse detection threshold is hit
 
 **Bot Detection (expect IP flagged after 50+ requests)**
 ```powershell
@@ -406,13 +399,13 @@ Expected result: returns 403 around request 12 once the abuse detection threshol
     Write-Host "Request $_"
 }
 ```
-Then check `http://localhost:8080/metrics/suspicious` (should show bot IP)
+Then check `http://localhost:8080/metrics/suspicious` (should show the flagged IP)
 
 ---
 
-### IntelliJ Terminal
+### Using IntelliJ Terminal
 
-The same PowerShell commands above work in the IntelliJ terminal. Open it via the **Terminal** tab at the bottom of IntelliJ and run the commands directly.
+The same PowerShell commands work in the IntelliJ terminal. Open it via the **Terminal** tab at the bottom of IntelliJ.
 
 Alternatively use curl on Mac or Linux:
 ```bash
@@ -421,36 +414,27 @@ curl http://localhost:8080/api/test123/notes -H "X-API-Key: dev-key-token"
 
 ---
 
-### Postman (VS Code)
+### Using Postman
 
 1. Open Postman and create a new request
 2. Set the method to **GET**
 3. Set the URL to `http://localhost:8080/api/test123/notes`
-4. Go to the **Headers** tab and add:
-   - Key: `X-API-Key`
-   - Value: `dev-key-token`
+4. Go to the **Headers** tab and add `X-API-Key` as the key and `dev-key-token` as the value
 5. Click **Send**
-
-To test different scenarios change the key value:
-- Valid: `dev-key-token`, `dev-key-fixed`, `dev-key-sliding`, `dev-key-business`
-- Invalid: any other value e.g. `bad-key`
 
 To trigger the rate limit click Send rapidly more than 3 times with the same key.
 
 ---
 
-## 4. Checking Metrics and Logs
+## Checking Metrics and Logs
 
-All endpoints below require no API key.
+No API key is required for any of the endpoints below.
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /metrics` | Live count of total, blocked, allowed, and per-key requests |
-| `GET /metrics/logs` | Last 100 requests with full details including IP and algorithm |
-| `GET /metrics/logs/filter` | Filter logs by decision, reason, apiKey, or algorithm |
-| `GET /metrics/logs/export/json` | Download all logs as a JSON file |
-| `GET /metrics/logs/export/csv` | Download all logs as a CSV file |
-| `GET /metrics/suspicious` | List of IPs flagged as potential bots |
+```
+http://localhost:8080/metrics
+http://localhost:8080/metrics/logs
+http://localhost:8080/metrics/suspicious
+```
 
 ### Example `/metrics` response
 ```json
@@ -476,32 +460,17 @@ All endpoints below require no API key.
     "path": "/api/test123/notes",
     "decision": "ALLOWED",
     "reason": "ok",
-    "algorithm": "token"
-  },
-  {
-    "timestamp": "2026-04-07T14:02:12",
-    "apiKey": "MISSING",
-    "ip": "127.0.0.1",
-    "path": "/api/test123/notes",
-    "decision": "BLOCKED",
-    "reason": "invalid_or_missing_key",
-    "algorithm": "token"
+    "algorithm": "token",
+    "latencyMs": 12
   }
 ]
 ```
 
-### Checking logs & metrics
-```
-http://localhost:8080/metrics
-http://localhost:8080/metrics/logs
-```
-To check any suspicious bot IPs
-```
-http://localhost:8080/metrics/suspicious
-```
+---
 
-### Filtering logs
-Check which requests were BLOCKED, ALLOWED, for what reason where they allowed or blocked, what type of dev-key was used, what type of rate-limitng algorithm was used
+## Filtering Logs
+
+Filter by any combination of fields (no API key required)
 
 ```
 http://localhost:8080/metrics/logs/filter?decision=BLOCKED
@@ -513,12 +482,11 @@ http://localhost:8080/metrics/logs/filter?reason=invalid_or_missing_key
 http://localhost:8080/metrics/logs/filter?reason=abuse_detected
 
 http://localhost:8080/metrics/logs/filter?apiKey=dev-key-token
-http://localhost:8080/metrics/logs/filter?apiKey=dev-key-business
 http://localhost:8080/metrics/logs/filter?apiKey=dev-key-fixed
 http://localhost:8080/metrics/logs/filter?apiKey=dev-key-sliding
+http://localhost:8080/metrics/logs/filter?apiKey=dev-key-business
 
 http://localhost:8080/metrics/logs/filter?algorithm=token
-http://localhost:8080/metrics/logs/filter?algorithm=business
 http://localhost:8080/metrics/logs/filter?algorithm=fixed
 http://localhost:8080/metrics/logs/filter?algorithm=sliding
 ```
@@ -530,22 +498,115 @@ http://localhost:8080/metrics/logs/filter?decision=BLOCKED&algorithm=token
 
 ---
 
-## 5. Exporting Logs
+## Exporting Logs
+
+Both links automatically download a file (no API key required)
 
 ```
 http://localhost:8080/metrics/logs/export/json
 ```
-Downloads a `logs.json` file with all current log entries.
+Downloads `logs.json` with all current log entries.
 
 ```
 http://localhost:8080/metrics/logs/export/csv
 ```
-Downloads a `logs.csv` file that can be opened in Excel or any spreadsheet app.
+Downloads `logs.csv` which can be opened directly in Excel.
 
 ---
 
-> Brief Overview
---------------------------------------------------
+## New Features (Added 14th April 2026)
+
+---
+
+### Feature 1: Request Latency Tracking
+
+Every log entry now includes `latencyMs` showing how long the request took in milliseconds. `MetricsService` aggregates these into p50, p95, and p99 percentiles per client so you can check how efficiently requests are being processed at different points. p50 is the median speed, p95 covers 95% of requests, and p99 shows the worst case
+
+A risk score per client also shows how close each client is to hitting the rate limit as a percentage. `MetricsExporter.java` automatically saves the full metrics snapshot to a timestamped JSON file every hour in the `metrics/` folder so data survives container restarts
+
+**Check latency percentiles per client:**
+```
+http://localhost:8080/metrics/latency?apiKey=dev-key-token
+http://localhost:8080/metrics/latency?apiKey=dev-key-fixed
+http://localhost:8080/metrics/latency?apiKey=dev-key-sliding
+```
+Expected response:
+```json
+{
+  "apiKey": "dev-key-token",
+  "percentiles": { "p50": 10, "p95": 45, "p99": 80 },
+  "statusCodes": { "200": 3, "429": 5 },
+  "riskScore": "100%"
+}
+```
+
+**Check risk scores for all clients:**
+```
+http://localhost:8080/metrics/risk
+```
+
+**Auto-export test:** temporarily change `@Scheduled(fixedRate = 3600000)` to `@Scheduled(fixedRate = 10000)` in `MetricsExporter.java`, restart the gateway, wait 10 seconds and check for a new `metrics/` folder in `api-gateway/` containing a timestamped JSON file. Change back to `3600000` after testing
+
+---
+
+### Feature 2: Risk Levels for Suspicious IPs
+
+Suspicious IPs are now grouped into three risk tiers based on total request volume rather than just being flagged or not
+
+| Risk Level | Threshold | Meaning |
+|------------|-----------|---------|
+| `LOW` | Over 50 requests | Elevated traffic, flagged for monitoring |
+| `MEDIUM` | Over 100 requests | High volume, likely automated |
+| `HIGH` | Over 200 requests | Very high volume, likely bot or DDoS source |
+
+Send 55+ requests to flag an IP then check:
+```
+http://localhost:8080/metrics/suspicious/risk
+```
+Expected response:
+```json
+{
+  "HIGH":   [],
+  "MEDIUM": [],
+  "LOW":    ["127.0.0.1"]
+}
+```
+
+> Send 100+ requests to see MEDIUM and 200+ for HIGH.
+
+---
+
+### Feature 3: Send Logs to Backend in Real Time
+
+Every log entry is now forwarded to the backend in real time via `LogForwarder.java`. A new `LogController.java` was added to the backend to receive and store them. If the backend is unreachable the gateway keeps running normally and forwarding never blocks or crashes the gateway
+
+After sending any requests check:
+```
+http://localhost:8081/api/logs
+```
+Should show the same entries as `http://localhost:8080/metrics/logs` confirming logs are being forwarded in real time
+
+---
+
+## All Endpoints Reference
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /metrics` | Totals, blocked, allowed, per-key counts, risk scores |
+| `GET /metrics/logs` | Last 100 requests with full details and latency |
+| `GET /metrics/logs/filter?...` | Filter by decision, reason, apiKey, or algorithm |
+| `GET /metrics/logs/export/json` | Download all logs as a JSON file |
+| `GET /metrics/logs/export/csv` | Download all logs as a CSV file |
+| `GET /metrics/suspicious` | All IPs flagged as potential bots |
+| `GET /metrics/suspicious/risk` | Flagged IPs grouped by HIGH/MEDIUM/LOW risk |
+| `GET /metrics/latency?apiKey=...` | p50/p95/p99 latency, status codes, risk score per client |
+| `GET /metrics/risk` | Risk score percentage for all tracked clients |
+| `GET /api/logs` (backend port 8081) | All log entries forwarded from the gateway |
+
+> No API key is required for any of these endpoints.
+---
+
+## Overall Project Overview & Progress
 
 TECHNOLOGIES USED
 

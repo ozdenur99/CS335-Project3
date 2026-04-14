@@ -1,6 +1,10 @@
 package com.CS335_Project3.api_gateway.filter;
 
+import com.CS335_Project3.api_gateway.RateLimiter;
+import com.CS335_Project3.api_gateway.logging.LogEntry;
+import com.CS335_Project3.api_gateway.logging.LogForwarder;
 import com.CS335_Project3.api_gateway.logging.RequestLogger;
+import com.CS335_Project3.api_gateway.metrics.BotDetector;
 import com.CS335_Project3.api_gateway.metrics.MetricsService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -10,34 +14,39 @@ import org.springframework.core.annotation.Order;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import java.io.IOException;
-import com.CS335_Project3.api_gateway.RateLimiter;
-import com.CS335_Project3.api_gateway.metrics.BotDetector;
 import org.springframework.web.util.ContentCachingResponseWrapper;
+import java.io.IOException;
+import java.util.List;
 
-//@Component makes it run once only, making all filters share the same log list
+//@Component makes Spring create one single instance shared across the whole app
 //@Order(1) ensures LoggingFilter runs first and wraps the entire chain
-//so blocked requests which were not getting logged can now get logged
+//this way it can always read the final status code after all other filters finish
+//if this was not Order(1) blocked requests would never get logged
 @Component
 @Order(1)
 public class LoggingFilter extends OncePerRequestFilter {
 
-    //we inject RequestLogger, MetricsService, RateLimiter and BotDetector so we can record, measure and detect on every request
+    //these paths are excluded from logging so browser generated requests
+    //like favicon.ico and metrics page loads dont pollute the metrics data
+    private static final List<String> EXCLUDED_PATHS =
+            List.of("/health", "/metrics", "/metrics/logs", "/favicon.ico");
+
+    //we inject all 5 dependencies so we can record, measure, detect and forward on every request
     private final RequestLogger requestLogger;
     private final MetricsService metricsService;
-    private final RateLimiter rateLimiter;
-    private final BotDetector botDetector;
+    private final RateLimiter rateLimiter;       //used to look up which algorithm the client uses
+    private final BotDetector botDetector;       //used to flag suspicious IPs
+    private final LogForwarder logForwarder;     //used to forward logs to the backend in real time
 
-    public LoggingFilter(RequestLogger requestLogger, MetricsService metricsService, RateLimiter rateLimiter, BotDetector botDetector) {
+    public LoggingFilter(RequestLogger requestLogger, MetricsService metricsService,
+                         RateLimiter rateLimiter, BotDetector botDetector,
+                         LogForwarder logForwarder) {
         this.requestLogger  = requestLogger;
         this.metricsService = metricsService;
         this.rateLimiter    = rateLimiter;
         this.botDetector    = botDetector;
+        this.logForwarder   = logForwarder;
     }
-
-    //paths excluded from logging so browser generated requests dont pollute the metrics data
-    private static final java.util.List<String> EXCLUDED_PATHS =
-            java.util.List.of("/health", "/metrics", "/metrics/logs", "/favicon.ico");
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -45,43 +54,59 @@ public class LoggingFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain chain)
             throws ServletException, IOException {
 
-        //skips logging for internal/static paths
+        //skip logging for internal/static paths so they dont show up in metrics
         if (EXCLUDED_PATHS.contains(request.getRequestURI())) {
             chain.doFilter(request, response);
             return;
         }
 
+        //record the start time so we can calculate how long the request took
+        long startTime = System.currentTimeMillis();
+
         //wrap the response so we can always read the status after the chain finishes
+        //without this Spring sometimes commits the response before we can read it
         ContentCachingResponseWrapper wrappedResponse =
                 new ContentCachingResponseWrapper(response);
 
-        //grab request info
+        //grab all the request info we need before passing it on
         String apiKey = request.getHeader("X-API-Key");
         String path   = request.getRequestURI();
 
+        //if no key was provided label it as MISSING so it still appears in logs
         if (apiKey == null || apiKey.isBlank()) {
             apiKey = "MISSING";
         }
 
-        //gets the client IP and which rate limiting algorithm they are assigned to
+        //get the client IP and which rate limiting algorithm they are assigned to
         String ip        = request.getRemoteAddr();
         String algorithm = rateLimiter.getAlgorithm(apiKey.toLowerCase());
 
-        //records IP for bot detection
+        //record the IP in BotDetector and check if it has exceeded the threshold
+        //if flagged we log it immediately and return early without forwarding the request
         botDetector.record(ip);
         if (botDetector.isSuspicious(ip)) {
-            requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm);
-            metricsService.recordRequest(apiKey, true);
+            long latencyMs = System.currentTimeMillis() - startTime;
+            LogEntry flaggedEntry = new LogEntry(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs);
+            requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs);
+            metricsService.recordRequest(apiKey, true, latencyMs, 0);
+            logForwarder.forward(flaggedEntry);
             wrappedResponse.copyBodyToResponse();
             return;
         }
 
-        //pass the wrapped response through the chain
+        //passes the wrapped response through the rest of the filter chain
+        //this runs AbuseFilter, ApiKeyFilter, RateLimiter and GatewayController
+        //everything happens inside this line after it returns we know the final outcome
         chain.doFilter(request, wrappedResponse);
 
-        //now we can always read the real status code
+        //calculate how long the full request took in milliseconds
+        long latencyMs = System.currentTimeMillis() - startTime;
+
+        //read the final HTTP status code from the wrapped response
+        //this is now always reliable because the wrapper held it in memory
         int status = wrappedResponse.getStatus();
 
+        //map the status code to a human readable decision and reason
         String decision;
         String reason;
 
@@ -99,15 +124,18 @@ public class LoggingFilter extends OncePerRequestFilter {
             reason   = "ok";
         }
 
-        //returns true if the request was blocked for any reason, false if it was allowed through
+        //true if the request was blocked for any reason, false if it was allowed through
         boolean wasBlocked = decision.equals("BLOCKED");
 
-        //records the full request details in the log and update the metrics counters
-        requestLogger.log(apiKey, ip, path, decision, reason, algorithm);
-        metricsService.recordRequest(apiKey, wasBlocked);
+        //record the full request details in the log and update the metrics counters
+        requestLogger.log(apiKey, ip, path, decision, reason, algorithm, latencyMs);
+        //pass latency and status code to MetricsService so it can track percentiles and status breakdowns
+        metricsService.recordRequest(apiKey, wasBlocked, latencyMs, status);
 
-        //copies the response body back so the client still receives it
-        //(ContentCachingResponseWrapper holds it in memory)
+        //forward the log entry to the backend in real time
+        logForwarder.forward(new LogEntry(apiKey, ip, path, decision, reason, algorithm, latencyMs));
+
+        //copy the response body back so the client still receives it
         wrappedResponse.copyBodyToResponse();
     }
 }

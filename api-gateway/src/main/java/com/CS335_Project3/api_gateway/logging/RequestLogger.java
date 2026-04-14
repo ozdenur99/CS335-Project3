@@ -10,13 +10,13 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 @Component
 public class RequestLogger {
     //we use a ConcurrentLinkedQueue to add entries simultaneously
-    //because multiple HTTP requests can arrive at the same time
+    // so that multiple HTTP requests can arrive at the same time
     private final Queue<LogEntry> logs = new ConcurrentLinkedQueue<>();
 
     //every request is processed and shows the string fields
     //and creates a new LogEntry with the timestamp automatically set
-    public void log(String apiKey, String ip, String path, String decision, String reason, String algorithm) {
-        logs.add(new LogEntry(apiKey, ip, path, decision, reason, algorithm));
+    public void log(String apiKey, String ip, String path, String decision, String reason, String algorithm, long latencyMs) {
+        logs.add(new LogEntry(apiKey, ip, path, decision, reason, algorithm, latencyMs));
     }
 
     //returns last 100 log entries as a List

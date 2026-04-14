@@ -44,6 +44,7 @@ class TenantScopedRateLimiterTest {
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
     }
 
+
     @BeforeEach
     void setUp() {
         // this.config = buildConfig();
