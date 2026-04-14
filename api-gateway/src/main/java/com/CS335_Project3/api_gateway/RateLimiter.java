@@ -10,6 +10,8 @@ import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy
 import com.CS335_Project3.api_gateway.ratelimiter.SlidingWindowRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.LeakyBucketRateLimiterStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.annotation.PostConstruct;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
  * Main entry point for rate limiting logic.
@@ -36,6 +38,8 @@ public class RateLimiter {
 
     // Config for hierarchical policies
     private final TenantRateLimitConfig tenantRateLimitConfig;
+
+    private final StringRedisTemplate redis;
 
     /*
      * This map stores which algorithm each client should use
@@ -76,13 +80,15 @@ public class RateLimiter {
             FixedWindowRateLimiterStrategy fixedWindowStrategy,
             SlidingWindowRateLimiterStrategy slidingWindowStrategy,
             LeakyBucketRateLimiterStrategy leakyBucketStrategy,
-            TenantRateLimitConfig tenantRateLimitConfig) {
+            TenantRateLimitConfig tenantRateLimitConfig,
+            StringRedisTemplate redis) {
 
         this.tokenBucketStrategy = tokenBucketStrategy;
         this.fixedWindowStrategy = fixedWindowStrategy;
         this.slidingWindowStrategy = slidingWindowStrategy;
         this.leakyBucketStrategy = leakyBucketStrategy;
         this.tenantRateLimitConfig = tenantRateLimitConfig;
+        this.redis = redis;
 
         registerStrategies();
         registerClientPolicies();
@@ -124,7 +130,8 @@ public class RateLimiter {
         // to trigger 429 without sending too many requests for logging
         clientLimits.put("dev-key-business", 6);
         // Tenant/App scoped keys — algorithm and limit are fallback only
-        // Real policy comes from tenant/app config (application.properties or ConfigController)
+        // Real policy comes from tenant/app config (application.properties or
+        // ConfigController)
         clientAlgorithms.put("key-acme-dashboard", "token");
         clientAlgorithms.put("key-acme-api", "fixed");
         clientAlgorithms.put("key-beta-dashboard", "sliding");
@@ -231,5 +238,36 @@ public class RateLimiter {
         }
 
         return strategy.isRequestAllowed(bucketKey, resolvedLimit);
+    }
+
+    /*
+     * Reads Redis for any live overrides written by ConfigController.
+     * 
+     * @PostConstruct = runs at startup, so gateway2 can see changes made by
+     * gateway1.
+     * Also called directly by ConfigController after each POST /admin/config.
+     */
+    @PostConstruct
+    public void reloadConfig() {
+        tenantRateLimitConfig.getTenants().forEach((tenantId, tenantPolicy) -> {
+
+            // Tenant-level overrides
+            String tenantAlgo = redis.opsForValue().get("config:" + tenantId + ":algorithm");
+            String tenantLimit = redis.opsForValue().get("config:" + tenantId + ":limit");
+            if (tenantAlgo != null)
+                tenantPolicy.setAlgorithm(tenantAlgo);
+            if (tenantLimit != null)
+                tenantPolicy.setLimit(Integer.parseInt(tenantLimit));
+
+            // App-level overrides
+            tenantPolicy.getApps().forEach((appId, appPolicy) -> {
+                String appAlgo = redis.opsForValue().get("config:" + tenantId + "/" + appId + ":algorithm");
+                String appLimit = redis.opsForValue().get("config:" + tenantId + "/" + appId + ":limit");
+                if (appAlgo != null)
+                    appPolicy.setAlgorithm(appAlgo);
+                if (appLimit != null)
+                    appPolicy.setLimit(Integer.parseInt(appLimit));
+            });
+        });
     }
 }
