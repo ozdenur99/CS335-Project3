@@ -15,8 +15,8 @@ public class RequestLogger {
 
     //every request is processed and shows the string fields
     //and creates a new LogEntry with the timestamp automatically set
-    public void log(String apiKey, String ip, String path, String decision, String reason, String algorithm) {
-        logs.add(new LogEntry(apiKey, ip, path, decision, reason, algorithm));
+    public void log(String apiKey, String ip, String path, String decision, String reason, String algorithm, long latencyMs) {
+        logs.add(new LogEntry(apiKey, ip, path, decision, reason, algorithm, latencyMs));
     }
 
     //returns last 100 log entries as a List

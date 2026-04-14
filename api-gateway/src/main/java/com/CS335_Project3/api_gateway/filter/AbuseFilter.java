@@ -34,7 +34,10 @@ public class AbuseFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AbuseFilter.class);
     //added new excluded paths for logging testing
-    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics", "/metrics/logs", "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv", "/metrics/suspicious");
+    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics", "/metrics/logs", "/metrics/logs/filter",
+            "/metrics/logs/export/json", "/metrics/logs/export/csv",
+            "/metrics/suspicious", "/metrics/suspicious/risk",
+            "/metrics/latency", "/metrics/risk");
 
     // private final Spike spike;
     private final Failure failure;
