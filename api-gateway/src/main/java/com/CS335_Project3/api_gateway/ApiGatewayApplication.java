@@ -9,7 +9,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
-@EnableScheduling  //added so @Scheduled in MetricsExporter runs automatically
+@EnableScheduling  //added so @Scheduled in MetricsExporter.java runs automatically
 public class ApiGatewayApplication {
 
     public static void main(String[] args) {

@@ -11,7 +11,7 @@ public class LogForwarder {
 
     private final RestTemplate restTemplate;
 
-    //reads the backend URL from application.properties
+    //it reads the backend URL from application.properties
     //falls back to localhost:8081 if not set
     @Value("${backend.url:http://localhost:8081/api/}")
     private String backendUrl;

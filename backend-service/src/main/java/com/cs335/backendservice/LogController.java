@@ -10,7 +10,7 @@ import java.util.Map;
 @RequestMapping("/api/logs")
 public class LogController {
 
-    //stores received logs in memory (resets on restart)
+    //stores received logs in memory (resets when restarted)
     private final List<Map<String, Object>> receivedLogs = new ArrayList<>();
 
     //POST /api/logs (receives a log entry from the gateway)

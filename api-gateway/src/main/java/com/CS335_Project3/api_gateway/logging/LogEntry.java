@@ -27,7 +27,7 @@ public class LogEntry {
         this.latencyMs = latencyMs;
     }
 
-    //Spring needs these getters to convert this object to JSON
+    //Spring needs these parameters to convert the objects to JSON
     public LocalDateTime getTimestamp() { return timestamp; }
     public String getApiKey()           { return apiKey; }
     public String getIp()               { return ip; }

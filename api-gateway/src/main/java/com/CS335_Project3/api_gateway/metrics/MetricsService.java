@@ -37,7 +37,7 @@ public class MetricsService {
     private final ConcurrentHashMap<String, AtomicInteger> perKeyRequestsInWindow
             = new ConcurrentHashMap<>();
 
-    //the rate limit per client (used to calculate risk percentage)
+    //the rate limit per client (used to calculate risk %)
     //matches the limits set in RateLimiter.java
     private static final int DEFAULT_LIMIT = 3;
 

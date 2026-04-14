@@ -86,7 +86,6 @@ public class AbuseFilter extends OncePerRequestFilter {
 
         //     boolean shouldBlock = failure.recordAndCheck(clientId);
         //     log.warn("Spike recorded for clientId={}, ip={}, shouldBlock={}", clientId, ip, shouldBlock);
-
         //     if (shouldBlock) {
         //         AbuseEvent blockEvent = new AbuseEvent(
         //                 AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,

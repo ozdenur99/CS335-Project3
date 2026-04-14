@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 @Component
 public class RequestLogger {
     //we use a ConcurrentLinkedQueue to add entries simultaneously
-    //because multiple HTTP requests can arrive at the same time
+    // so that multiple HTTP requests can arrive at the same time
     private final Queue<LogEntry> logs = new ConcurrentLinkedQueue<>();
 
     //every request is processed and shows the string fields

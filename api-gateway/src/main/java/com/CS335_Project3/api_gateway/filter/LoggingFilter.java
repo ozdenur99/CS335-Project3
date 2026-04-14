@@ -94,7 +94,7 @@ public class LoggingFilter extends OncePerRequestFilter {
             return;
         }
 
-        //pass the wrapped response through the rest of the filter chain
+        //passes the wrapped response through the rest of the filter chain
         //this runs AbuseFilter, ApiKeyFilter, RateLimiter and GatewayController
         //everything happens inside this line after it returns we know the final outcome
         chain.doFilter(request, wrappedResponse);
