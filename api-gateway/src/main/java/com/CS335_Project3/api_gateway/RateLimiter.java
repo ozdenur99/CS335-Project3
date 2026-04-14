@@ -251,18 +251,20 @@ public class RateLimiter {
     public void reloadConfig() {
         tenantRateLimitConfig.getTenants().forEach((tenantId, tenantPolicy) -> {
 
-            // Tenant-level overrides
-            String tenantAlgo = redis.opsForValue().get("config:" + tenantId + ":algorithm");
-            String tenantLimit = redis.opsForValue().get("config:" + tenantId + ":limit");
+            // Tenant-level overrides — one Hash read instead of two String reads
+            Map<Object, Object> tenantOverrides = redis.opsForHash().entries("config:" + tenantId);
+            String tenantAlgo = (String) tenantOverrides.get("algorithm");
+            String tenantLimit = (String) tenantOverrides.get("limit");
             if (tenantAlgo != null)
                 tenantPolicy.setAlgorithm(tenantAlgo);
             if (tenantLimit != null)
                 tenantPolicy.setLimit(Integer.parseInt(tenantLimit));
 
-            // App-level overrides
+            // App-level overrides — one Hash read per app
             tenantPolicy.getApps().forEach((appId, appPolicy) -> {
-                String appAlgo = redis.opsForValue().get("config:" + tenantId + "/" + appId + ":algorithm");
-                String appLimit = redis.opsForValue().get("config:" + tenantId + "/" + appId + ":limit");
+                Map<Object, Object> appOverrides = redis.opsForHash().entries("config:" + tenantId + "/" + appId);
+                String appAlgo = (String) appOverrides.get("algorithm");
+                String appLimit = (String) appOverrides.get("limit");
                 if (appAlgo != null)
                     appPolicy.setAlgorithm(appAlgo);
                 if (appLimit != null)

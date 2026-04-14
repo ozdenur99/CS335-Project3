@@ -97,7 +97,8 @@ public class ConfigController {
         }
 
         // 2. Validate algorithm name immediately (Fail Fast)
-        // containsKey() prevents searching for tenants if the user sent a typo like "tokken"
+        // containsKey() prevents searching for tenants if the user sent a typo like
+        // "tokken"
         if (algorithm != null && !rateLimiter.getStrategies().containsKey(algorithm)) {
             return Map.of("status", "error", "message", "Invalid algorithm: " + algorithm);
         }
@@ -126,10 +127,12 @@ public class ConfigController {
             // Write to Redis so gateway-2 can read the updated value.
             // Key format: "config:tenant-acme/dashboard:algorithm"
             // This is a simple string key-value — not a sorted set or hash.
+            // Write as Redis Hash — one key per scope, fields inside
+            String appHashKey = "config:" + tenant + "/" + app;
             if (algorithm != null)
-                redis.opsForValue().set("config:" + tenant + "/" + app + ":algorithm", algorithm);
+                redis.opsForHash().put(appHashKey, "algorithm", algorithm);
             if (limit != null)
-                redis.opsForValue().set("config:" + tenant + "/" + app + ":limit", limit.toString());
+                redis.opsForHash().put(appHashKey, "limit", limit.toString());
 
         } else {
             // Tenant-level change
@@ -140,15 +143,16 @@ public class ConfigController {
 
             // Redis key format for tenant level: "config:tenant-acme:algorithm"
             // Notice no "/" — that distinguishes tenant-level from app-level keys.
+            String tenantHashKey = "config:" + tenant;
             if (algorithm != null)
-                redis.opsForValue().set("config:" + tenant + ":algorithm", algorithm);
+                redis.opsForHash().put(tenantHashKey, "algorithm", algorithm);
             if (limit != null)
-                redis.opsForValue().set("config:" + tenant + ":limit", limit.toString());
+                redis.opsForHash().put(tenantHashKey, "limit", limit.toString());
         }
 
         // Reload so this gateway's RateLimiter sees the update immediately
-        // Tell THIS gateway's RateLimiter to re-read the updated TenantRateLimitConfig.
-        rateLimiter.reloadConfig();
+        // Notify ALL gateways via Pub/Sub — each listener calls reloadConfig() instantly
+        redis.convertAndSend("config-reload", "update");
 
         return Map.of("status", "ok", "message", "config updated");
     }

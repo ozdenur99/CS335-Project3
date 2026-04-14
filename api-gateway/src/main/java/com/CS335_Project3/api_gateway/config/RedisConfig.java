@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 
 @Configuration
 public class RedisConfig {
@@ -15,7 +17,8 @@ public class RedisConfig {
         template.setConnectionFactory(factory);
 
         // Use plain strings for both keys and values — no Java serialization
-        // String serializer keeps keys exactly as you write them — rl:token:tenant-acme/dashboard
+        // String serializer keeps keys exactly as you write them —
+        // rl:token:tenant-acme/dashboard
         // This keeps Redis keys human-readable
         StringRedisSerializer serializer = new StringRedisSerializer();
         template.setKeySerializer(serializer);
@@ -24,5 +27,17 @@ public class RedisConfig {
         template.setHashValueSerializer(serializer);
 
         return template;
+    }
+
+    // Registers the Pub/Sub listener so this gateway reacts to config-reload messages.
+    // When any gateway POSTs to /admin/config, all gateways reload instantly.
+    @Bean
+    public RedisMessageListenerContainer redisMessageListenerContainer(
+            RedisConnectionFactory factory,
+            ConfigReloadListener listener) {
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(factory);
+        container.addMessageListener(listener, new ChannelTopic("config-reload"));
+        return container;
     }
 }
