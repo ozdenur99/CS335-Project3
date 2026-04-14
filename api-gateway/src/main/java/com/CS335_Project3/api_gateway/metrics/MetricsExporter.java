@@ -25,8 +25,9 @@ public class MetricsExporter {
     }
 
     //runs every hour automatically (3600000 ms = 1 hr)
+    //changed for testing purposes to export every minute
     //dumps the current metrics snapshot to a JSON file named with the timestamp
-    //e.g. metrics/2026-04-12-14-00.json
+    //e.g. api-gateway/metrics/2026-04-12-14-00.json
     //this means data survives container restarts since it is saved to disk
     @Scheduled(fixedRate = 600000)
     public void exportMetrics() {
