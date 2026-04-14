@@ -13,20 +13,20 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Main entry point for rate limiting logic.
- * Manages multiple strategies and resolves 
- * hierarchical policies (App > Tenant > Global).
+ * Manages multiple selective algorithms and resolves
+ * Hierarchical policies (App > Tenant > Client >Global).
  */
 @Component
 public class RateLimiter {
 
     /*
-        This class acts as the main entry point for rate limiting.
-
-        It holds multiple rate limiting strategies and chooses
-        which one to use based on the client.
-
-        This allows different clients to use different algorithms.
-    */
+     * This class acts as the main entry point for rate limiting.
+     * 
+     * It holds multiple rate limiting strategies and chooses
+     * which one to use based on the client.
+     * 
+     * This allows different clients to use different algorithms.
+     */
 
     // Strategy instances
     private final TokenBucketRateLimiterStrategy tokenBucketStrategy;
@@ -38,45 +38,45 @@ public class RateLimiter {
     private final TenantRateLimitConfig tenantRateLimitConfig;
 
     /*
-        This map stores which algorithm each client should use
-
-        Key   = clientId (API key)
-        Value = algorithm name
-    */
+     * This map stores which algorithm each client should use
+     * 
+     * Key = clientId (API key)
+     * Value = algorithm name
+     */
     private final Map<String, String> clientAlgorithms = new HashMap<>();
 
     /*
-        This map stores the actual strategies
-
-        Key   = algorithm name
-        Value = strategy implementation
-
-        This removes the need for switch statements
-    */
+     * This map stores the actual strategies
+     * 
+     * Key = algorithm name
+     * Value = strategy implementation
+     * 
+     * This removes the need for switch statements
+     */
     private final Map<String, RateLimiterStrategy> strategies = new HashMap<>();
 
     /*
-        This map stores each client's request limit / bucket size
-
-        Key   = clientId (API key)
-        Value = max allowed requests / capacity
-    */
+     * This map stores each client's request limit / bucket size
+     * 
+     * Key = clientId (API key)
+     * Value = max allowed requests / capacity
+     */
     private final Map<String, Integer> clientLimits = new HashMap<>();
 
     /*
-        Primary constructor used by Spring (dependency injection)
-
-        Spring injects each strategy here, including the Redis-backed
-        fixed window strategy.
-
-        This is now the only constructor needed.
-    */
-   @Autowired
+     * Primary constructor used by Spring (dependency injection)
+     * 
+     * Spring injects each strategy here, including the Redis-backed
+     * fixed window strategy.
+     * 
+     * This is now the only constructor needed.
+     */
+    @Autowired
     public RateLimiter(TokenBucketRateLimiterStrategy tokenBucketStrategy,
-                   FixedWindowRateLimiterStrategy fixedWindowStrategy,
-                   SlidingWindowRateLimiterStrategy slidingWindowStrategy,
-                   LeakyBucketRateLimiterStrategy leakyBucketStrategy,
-                   TenantRateLimitConfig tenantRateLimitConfig) {
+            FixedWindowRateLimiterStrategy fixedWindowStrategy,
+            SlidingWindowRateLimiterStrategy slidingWindowStrategy,
+            LeakyBucketRateLimiterStrategy leakyBucketStrategy,
+            TenantRateLimitConfig tenantRateLimitConfig) {
 
         this.tokenBucketStrategy = tokenBucketStrategy;
         this.fixedWindowStrategy = fixedWindowStrategy;
@@ -89,19 +89,19 @@ public class RateLimiter {
     }
 
     /*
-        Register all available rate limiting strategies
-    */
+     * Register all available rate limiting strategies
+     */
     private void registerStrategies() {
         strategies.put("token", tokenBucketStrategy);
         strategies.put("fixed", fixedWindowStrategy);
         strategies.put("sliding", slidingWindowStrategy);
         strategies.put("leaky", leakyBucketStrategy);
-        
+
     }
 
     /*
-        Assign algorithms and limits to clients
-    */
+     * Assign algorithms and limits to clients
+     */
     private void registerClientPolicies() {
         // Standard clients
         clientAlgorithms.put("dev-key-token", "token");
@@ -125,11 +125,11 @@ public class RateLimiter {
     }
 
     /*
-        Called by API key filter
-
-        Determines which algorithm to use for the client
-        and delegates the request to that strategy
-    */
+     * Called by API key filter
+     * 
+     * Determines which algorithm to use for the client
+     * and delegates the request to that strategy
+     */
     public boolean isRequestAllowed(String clientId) {
 
         // Get algorithm for this client (default = token bucket)
@@ -145,7 +145,8 @@ public class RateLimiter {
         return strategy.isRequestAllowed(clientId, limit);
     }
 
-    // returns which rate limiting algorithm is assigned to the given client in the logs
+    // returns which rate limiting algorithm is assigned to the given client in the
+    // logs
     // it defaults to "token" algorithm if the client is not found in the map
     public String getAlgorithm(String clientId) {
         return clientAlgorithms.getOrDefault(clientId, "token");
@@ -158,10 +159,11 @@ public class RateLimiter {
     public boolean isRequestAllowed(String clientId, String tenantId, String appId) {
         // Safe access to configuration
         TenantRateLimitConfig cfg = this.tenantRateLimitConfig;
-        
+
         // 1. Resolve Tenant Policy
-        TenantRateLimitConfig.TenantPolicy tenantPolicy = (cfg != null && tenantId != null) 
-            ? cfg.getTenants().get(tenantId) : null;
+        TenantRateLimitConfig.TenantPolicy tenantPolicy = (cfg != null && tenantId != null)
+                ? cfg.getTenants().get(tenantId)
+                : null;
 
         // 2. Bypass check: If tenant exists but is disabled, allow all traffic
         if (tenantPolicy != null && !tenantPolicy.isEnabled()) {
@@ -169,8 +171,9 @@ public class RateLimiter {
         }
 
         // 3. Resolve App Policy
-        TenantRateLimitConfig.AppPolicy appPolicy = (tenantPolicy != null && appId != null) 
-            ? tenantPolicy.getApps().get(appId) : null;
+        TenantRateLimitConfig.AppPolicy appPolicy = (tenantPolicy != null && appId != null)
+                ? tenantPolicy.getApps().get(appId)
+                : null;
 
         // 4. Resolve Limit (Highest specificity wins: App > Tenant > Client/Global)
         int resolvedLimit;
@@ -182,9 +185,11 @@ public class RateLimiter {
             resolvedLimit = clientLimits.getOrDefault(clientId, (cfg != null) ? cfg.getDefaultLimit() : 5);
         }
 
-        // 5. Resolve Algorithm
+        // 5. Resolve Algorithm: App > Tenant > Client > Global
         String algoName;
-        if (tenantPolicy != null && tenantPolicy.getAlgorithm() != null) {
+        if (appPolicy != null && appPolicy.getAlgorithm() != null) {
+            algoName = appPolicy.getAlgorithm();
+        } else if (tenantPolicy != null && tenantPolicy.getAlgorithm() != null) {
             algoName = tenantPolicy.getAlgorithm();
         } else {
             algoName = clientAlgorithms.getOrDefault(clientId, (cfg != null) ? cfg.getDefaultAlgorithm() : "token");
@@ -199,9 +204,14 @@ public class RateLimiter {
          * Example: "tenant-acme/dashboard"
          * This allows existing strategies to isolate state without code changes.
          */
-        String bucketKey = (tenantId != null && !tenantId.isBlank() && appId != null && !appId.isBlank())
-                    ? tenantId + "/" + appId
-                    : clientId;
+        String bucketKey;
+        if (tenantId != null && !tenantId.isBlank() && appId != null && !appId.isBlank()) {
+            bucketKey = tenantId + "/" + appId; // app layer
+        } else if (tenantId != null && !tenantId.isBlank()) {
+            bucketKey = tenantId; // tenant layer — shared across all clients of that tenant
+        } else {
+            bucketKey = clientId; // client layer
+        }
 
         return strategy.isRequestAllowed(bucketKey, resolvedLimit);
     }

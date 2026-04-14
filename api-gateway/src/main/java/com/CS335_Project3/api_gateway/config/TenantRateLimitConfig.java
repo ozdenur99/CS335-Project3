@@ -56,8 +56,11 @@ public class TenantRateLimitConfig {
      */
     public static class TenantPolicy {
         private int limit = 5;
-        private String algorithm = "token";
+        // private String algorithm = "token";
         private boolean enabled = true;
+        //inherited algorithm: if null, tenant inherits global default; 
+        // if app also null, app inherits tenant/global default.
+        private String algorithm = null;  
 
         /** * Map of Application-specific policies within this tenant. 
          * Key: appId (e.g., "dashboard" or "api")  
@@ -86,13 +89,17 @@ public class TenantRateLimitConfig {
     public static class AppPolicy {
         private int limit = 5;
         private boolean enabled = true; 
-
-        // Getters and Setters 
+        // If null, app inherits tenant's algorithm; if tenant's is also null, inherits global default.
+        private String algorithm = null;  
         public int getLimit() { return limit; }
         public void setLimit(int limit) { this.limit = limit; }
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        
+        // Getters and Setters for algorithm
+        public String getAlgorithm() { return algorithm; }
+        public void setAlgorithm(String algorithm) { this.algorithm = algorithm; }
     }
 
 }
