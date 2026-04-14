@@ -124,9 +124,6 @@ public class ConfigController {
             if (limit != null)
                 appPolicy.setLimit(limit);
 
-            // Write to Redis so gateway-2 can read the updated value.
-            // Key format: "config:tenant-acme/dashboard:algorithm"
-            // This is a simple string key-value — not a sorted set or hash.
             // Write as Redis Hash — one key per scope, fields inside
             String appHashKey = "config:" + tenant + "/" + app;
             if (algorithm != null)

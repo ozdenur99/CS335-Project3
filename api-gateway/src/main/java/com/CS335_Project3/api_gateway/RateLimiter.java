@@ -176,6 +176,11 @@ public class RateLimiter {
         return clientAlgorithms.getOrDefault(clientId, "token");
     }
 
+    // exposes the strategies map so ConfigController can validate algorithm names
+    public Map<String, RateLimiterStrategy> getStrategies() {
+        return strategies;
+    }
+
     /**
      * New overloaded method for hierarchical scoping.
      * Resolves limits in order: App > Tenant > Global Default.
