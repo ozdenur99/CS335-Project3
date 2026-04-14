@@ -123,6 +123,22 @@ public class RateLimiter {
 
         // to trigger 429 without sending too many requests for logging
         clientLimits.put("dev-key-business", 6);
+        // Tenant/App scoped keys — algorithm and limit are fallback only
+        // Real policy comes from tenant/app config (application.properties or ConfigController)
+        clientAlgorithms.put("key-acme-dashboard", "token");
+        clientAlgorithms.put("key-acme-api", "fixed");
+        clientAlgorithms.put("key-beta-dashboard", "sliding");
+        clientAlgorithms.put("key-beta-api", "leaky");
+        clientAlgorithms.put("key-enterprise-dashboard", "fixed");
+        clientAlgorithms.put("key-enterprise-api", "token");
+
+        clientLimits.put("key-acme-dashboard", 10);
+        clientLimits.put("key-acme-api", 20);
+        clientLimits.put("key-beta-dashboard", 15);
+        clientLimits.put("key-beta-api", 25);
+        clientLimits.put("key-enterprise-dashboard", 20);
+        clientLimits.put("key-enterprise-api", 50);
+
     }
 
     /*
