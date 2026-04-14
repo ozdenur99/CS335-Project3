@@ -12,10 +12,15 @@ import java.util.List;
 @ConfigurationProperties(prefix = "gateway")
 public class ApiKeyConfig {
 
-    // Fallback keys used when application.properties is missing or api-keys is empty.
+    // Fallback keys used when application.properties is missing or api-keys is
+    // empty.
     // These are for local development only — never put real keys here.
-    private static final List<String> DEFAULT_KEYS =
-        List.of("dev-key-token", "dev-key-fixed", "dev-key-sliding", "dev-key-business", "dev-key-leaky");
+    private static final List<String> DEFAULT_KEYS = List.of("dev-key-token", "dev-key-fixed", "dev-key-sliding",
+            "dev-key-business", "dev-key-leaky",
+            "key-acme-dashboard", "key-acme-api",
+            "key-beta-dashboard", "key-beta-api",
+            "key-enterprise-dashboard", "key-enterprise-api"
+        );
 
     private List<String> apiKeys = new ArrayList<>(DEFAULT_KEYS);
 
@@ -33,10 +38,11 @@ public class ApiKeyConfig {
 
     // Normalises to lowercase so key matching is not case-sensitive.
     public boolean isValidKey(String key) {
-        if (key == null || key.isBlank()) return false;
+        if (key == null || key.isBlank())
+            return false;
         return apiKeys.stream()
-            .map(String::toLowerCase)
-            .toList()
-            .contains(key.toLowerCase());
+                .map(String::toLowerCase)
+                .toList()
+                .contains(key.toLowerCase());
     }
 }
