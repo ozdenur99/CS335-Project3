@@ -35,9 +35,9 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             "/metrics/logs/filter",
             "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
-            "/metrics/latency", "/metrics/risk", "/favicon.ico",
-            "/admin/config");
+            "/metrics/latency", "/metrics/risk", "/favicon.ico");
 
+    private static final String ADMIN_KEY_HEADER = "X-Admin-Key";
     private final ApiKeyConfig apiKeyConfig;
     private final RateLimiter rateLimiter;
 
@@ -53,6 +53,19 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String path = request.getRequestURI();
+
+        // Admin paths require a separate admin key
+        if (path.startsWith("/admin")) {
+            String adminKey = request.getHeader(ADMIN_KEY_HEADER);
+            if (!apiKeyConfig.isAdminKey(adminKey)) {
+                log.warn("BLOCKED reason=missing_admin_key path={}", path);
+                sendError(response, request, HttpServletResponse.SC_FORBIDDEN,
+                        "Forbidden", "Admin access requires X-Admin-Key header.");
+                return;
+            }
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         // Skip validation for excluded paths.
         if (EXCLUDED_PATHS.contains(path)) {
