@@ -22,7 +22,7 @@ import org.slf4j.LoggerFactory;
  */
 @Component
 public class RateLimiter {
-
+    private static final Logger log = LoggerFactory.getLogger(RateLimiter.class);
     /*
      * This class acts as the main entry point for rate limiting.
      * 
@@ -285,7 +285,7 @@ public class RateLimiter {
             });
             log.info("[RateLimiter] Configuration successfully synchronized with Redis.");
         } catch (Exception e) {
-            // This prevents the startup crash if Redis is unavailable, 
+            // This prevents the startup crash if Redis is unavailable,
             // allowing the gateway to run with local defaults.
             log.warn("[RateLimiter] Could not connect to Redis at startup. Falling back to local defaults. Reason: {}",
                     e.getMessage());
