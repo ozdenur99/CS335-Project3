@@ -8,8 +8,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+// enables @Scheduled methods: MetricsExporter snapshots + RateLimiter Redis health check
 @SpringBootApplication
-@EnableScheduling  //added so @Scheduled in MetricsExporter.java runs automatically
+@EnableScheduling 
 public class ApiGatewayApplication {
 
     public static void main(String[] args) {

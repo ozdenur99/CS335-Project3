@@ -14,6 +14,9 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.scheduling.annotation.Scheduled;
 
 /**
  * Main entry point for rate limiting logic.
@@ -68,6 +71,15 @@ public class RateLimiter {
      * Value = max allowed requests / capacity
      */
     private final Map<String, Integer> clientLimits = new HashMap<>();
+
+    // Tracks whether Redis is currently reachable
+    // switch to in-memory fallback mode if Redis goes down
+    // Create the "Circuit Breaker" to prevent 500 errors.
+    private volatile boolean redisAvailable = true;
+
+    // In-memory fallback counters used when Redis is down
+    // Key = bucketKey, Value = request count in current window
+    private final ConcurrentHashMap<String, AtomicInteger> fallbackCounters = new ConcurrentHashMap<>();
 
     /*
      * Primary constructor used by Spring (dependency injection)
@@ -167,8 +179,17 @@ public class RateLimiter {
         // Get limit for this client (default = 5)
         int limit = clientLimits.getOrDefault(clientId, 5);
 
-        // Delegate request
-        return strategy.isRequestAllowed(clientId, limit);
+        try {
+            boolean allowed = strategy.isRequestAllowed(clientId, limit);
+            redisAvailable = true;
+            return allowed;
+        } catch (Exception e) {
+            if (redisAvailable) {
+                log.warn("[RateLimiter] Redis unavailable, switching to in-memory fallback: {}", e.getMessage());
+                redisAvailable = false;
+            }
+            return fallbackAllow(clientId, limit);
+        }
     }
 
     // returns which rate limiting algorithm is assigned to the given client in the
@@ -244,7 +265,22 @@ public class RateLimiter {
             bucketKey = clientId; // client layer
         }
 
-        return strategy.isRequestAllowed(bucketKey, resolvedLimit);
+        try {
+            // Attempt the standard distributed check (Redis)
+            boolean allowed = strategy.isRequestAllowed(bucketKey, resolvedLimit);
+            redisAvailable = true; // Connection is good
+            return allowed;
+        } catch (Exception e) {
+            // If Redis fails, don't crash the request with a 500 error.
+            if (redisAvailable) {
+                // log once, not on every request
+                log.warn("[RateLimiter] Redis unavailable, switching to in-memory fallback: {}", e.getMessage());
+                redisAvailable = false;
+            }
+            // Switch to local memory counting so we still enforce limits
+            return fallbackAllow(bucketKey, resolvedLimit);
+        }
+
     }
 
     /*
@@ -289,6 +325,42 @@ public class RateLimiter {
             // allowing the gateway to run with local defaults.
             log.warn("[RateLimiter] Could not connect to Redis at startup. Falling back to local defaults. Reason: {}",
                     e.getMessage());
+        }
+    }
+
+    /*
+     * Fallback counter used when Redis is unreachable.
+     * Still enforces rate limits per key using in-memory counts,
+     * so the gateway stays secure even without Redis.
+     * Trade-off: limits are per-node only (not shared across gateway1/gateway2).
+     */
+    private boolean fallbackAllow(String key, int limit) {
+        int count = fallbackCounters
+                .computeIfAbsent(key, k -> new AtomicInteger(0))
+                .incrementAndGet();
+        return count <= limit;
+    }
+
+    /*
+     * Runs every 10 seconds to check if Redis has come back online.
+     * When Redis recovers: clears fallback counters (stale in-memory counts)
+     * and flips redisAvailable back to true so strategies resume using Redis.
+     * Logs only on state change (up→down or down→up) to avoid log spam.
+     */
+    @Scheduled(fixedDelay = 10000)
+    public void checkRedisHealth() {
+        try {
+            redis.hasKey("health-ping"); // lightweight read, no side effects
+            if (!redisAvailable) {
+                log.info("[RateLimiter] Redis connection restored. Clearing fallback counters.");
+                fallbackCounters.clear(); // reset stale counts so Redis takes over cleanly
+                redisAvailable = true;
+            }
+        } catch (Exception e) {
+            if (redisAvailable) {
+                log.warn("[RateLimiter] Redis health check failed: {}", e.getMessage());
+                redisAvailable = false;
+            }
         }
     }
 }
