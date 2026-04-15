@@ -12,6 +12,8 @@ import com.CS335_Project3.api_gateway.ratelimiter.LeakyBucketRateLimiterStrategy
 import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PostConstruct;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Main entry point for rate limiting logic.
@@ -246,35 +248,47 @@ public class RateLimiter {
     }
 
     /*
-     * Reads Redis for any live overrides written by ConfigController.
+     * Reads Redis for any live overrides written by ConfigController after each
+     * POST /admin/config.
      * 
      * @PostConstruct = runs at startup, so gateway2 can see changes made by
      * gateway1.
-     * Also called directly by ConfigController after each POST /admin/config.
+     * This allows dynamic updates without needing to restart the gateway.
+     * Wrapped in try-catch to prevent startup crashes if Redis is offline.
      */
     @PostConstruct
     public void reloadConfig() {
-        tenantRateLimitConfig.getTenants().forEach((tenantId, tenantPolicy) -> {
+        try {
+            tenantRateLimitConfig.getTenants().forEach((tenantId, tenantPolicy) -> {
+                // Tenant-level overrides — one Hash read instead of two String reads
+                Map<Object, Object> tenantOverrides = redis.opsForHash().entries("config:" + tenantId);
+                String tenantAlgo = (String) tenantOverrides.get("algorithm");
+                String tenantLimit = (String) tenantOverrides.get("limit");
+                if (tenantAlgo != null)
+                    tenantPolicy.setAlgorithm(tenantAlgo);
+                if (tenantLimit != null)
+                    tenantPolicy.setLimit(Integer.parseInt(tenantLimit));
 
-            // Tenant-level overrides — one Hash read instead of two String reads
-            Map<Object, Object> tenantOverrides = redis.opsForHash().entries("config:" + tenantId);
-            String tenantAlgo = (String) tenantOverrides.get("algorithm");
-            String tenantLimit = (String) tenantOverrides.get("limit");
-            if (tenantAlgo != null)
-                tenantPolicy.setAlgorithm(tenantAlgo);
-            if (tenantLimit != null)
-                tenantPolicy.setLimit(Integer.parseInt(tenantLimit));
+                // App-level overrides — one Hash read per app
+                tenantPolicy.getApps().forEach((appId, appPolicy) -> {
+                    Map<Object, Object> appOverrides = redis.opsForHash().entries("config:" + tenantId + "/" + appId);
+                    String appAlgo = (String) appOverrides.get("algorithm");
+                    String appLimit = (String) appOverrides.get("limit");
 
-            // App-level overrides — one Hash read per app
-            tenantPolicy.getApps().forEach((appId, appPolicy) -> {
-                Map<Object, Object> appOverrides = redis.opsForHash().entries("config:" + tenantId + "/" + appId);
-                String appAlgo = (String) appOverrides.get("algorithm");
-                String appLimit = (String) appOverrides.get("limit");
-                if (appAlgo != null)
-                    appPolicy.setAlgorithm(appAlgo);
-                if (appLimit != null)
-                    appPolicy.setLimit(Integer.parseInt(appLimit));
+                    if (appAlgo != null) {
+                        appPolicy.setAlgorithm(appAlgo);
+                    }
+                    if (appLimit != null) {
+                        appPolicy.setLimit(Integer.parseInt(appLimit));
+                    }
+                });
             });
-        });
+            log.info("[RateLimiter] Configuration successfully synchronized with Redis.");
+        } catch (Exception e) {
+            // This prevents the startup crash if Redis is unavailable, 
+            // allowing the gateway to run with local defaults.
+            log.warn("[RateLimiter] Could not connect to Redis at startup. Falling back to local defaults. Reason: {}",
+                    e.getMessage());
+        }
     }
 }
