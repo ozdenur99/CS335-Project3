@@ -30,6 +30,12 @@ public class GatewayController {
         return restTemplate.getForObject(BACKEND_URL + guid + "/notes", String.class);
     }
 
+    @GetMapping("/smart")
+    public String getSmartNotes(@PathVariable String guid) {
+        return restTemplate.getForObject(BACKEND_URL + guid + "/notes/smart", String.class);
+    }
+    
+
     @PostMapping
     public String createNote(@PathVariable String guid, @RequestBody String body) {
 

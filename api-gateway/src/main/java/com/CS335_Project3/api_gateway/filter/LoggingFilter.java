@@ -90,6 +90,13 @@ public class LoggingFilter extends OncePerRequestFilter {
             requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs);
             metricsService.recordRequest(apiKey, true, latencyMs, 0);
             logForwarder.forward(flaggedEntry);
+            wrappedResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            wrappedResponse.setContentType("application/json");
+            wrappedResponse.setCharacterEncoding("UTF-8");
+            wrappedResponse.getWriter().write(String.format(
+                "{\"status\":403,\"error\":\"Forbidden\",\"message\":\"Suspicious bot activity detected.\",\"path\":\"%s\"}",
+                path
+            ));
             wrappedResponse.copyBodyToResponse();
             return;
         }
