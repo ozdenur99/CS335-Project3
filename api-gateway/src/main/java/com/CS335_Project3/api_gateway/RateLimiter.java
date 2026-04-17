@@ -9,6 +9,7 @@ import com.CS335_Project3.api_gateway.ratelimiter.TokenBucketRateLimiterStrategy
 import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.SlidingWindowRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.LeakyBucketRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.DynamicAIMDRateLimiterStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PostConstruct;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -40,6 +41,7 @@ public class RateLimiter {
     private final FixedWindowRateLimiterStrategy fixedWindowStrategy;
     private final SlidingWindowRateLimiterStrategy slidingWindowStrategy;
     private final LeakyBucketRateLimiterStrategy leakyBucketStrategy;
+    private final DynamicAIMDRateLimiterStrategy dynamicAIMDRateLimiterStrategy;
 
     // Config for hierarchical policies
     private final TenantRateLimitConfig tenantRateLimitConfig;
@@ -91,16 +93,17 @@ public class RateLimiter {
      */
     @Autowired
     public RateLimiter(TokenBucketRateLimiterStrategy tokenBucketStrategy,
-            FixedWindowRateLimiterStrategy fixedWindowStrategy,
-            SlidingWindowRateLimiterStrategy slidingWindowStrategy,
-            LeakyBucketRateLimiterStrategy leakyBucketStrategy,
-            TenantRateLimitConfig tenantRateLimitConfig,
-            StringRedisTemplate redis) {
+                   FixedWindowRateLimiterStrategy fixedWindowStrategy,
+                   SlidingWindowRateLimiterStrategy slidingWindowStrategy,
+                   LeakyBucketRateLimiterStrategy leakyBucketStrategy,
+                   DynamicAIMDRateLimiterStrategy dynamicAIMDRateLimiterStrategy,
+                   TenantRateLimitConfig tenantRateLimitConfig) {
 
         this.tokenBucketStrategy = tokenBucketStrategy;
         this.fixedWindowStrategy = fixedWindowStrategy;
         this.slidingWindowStrategy = slidingWindowStrategy;
         this.leakyBucketStrategy = leakyBucketStrategy;
+        this.dynamicAIMDRateLimiterStrategy = dynamicAIMDRateLimiterStrategy;
         this.tenantRateLimitConfig = tenantRateLimitConfig;
         this.redis = redis;
 
@@ -116,7 +119,8 @@ public class RateLimiter {
         strategies.put("fixed", fixedWindowStrategy);
         strategies.put("sliding", slidingWindowStrategy);
         strategies.put("leaky", leakyBucketStrategy);
-
+        strategies.put("dynamic", dynamicAIMDRateLimiterStrategy);
+        
     }
 
     /*
@@ -128,6 +132,7 @@ public class RateLimiter {
         clientAlgorithms.put("dev-key-fixed", "fixed");
         clientAlgorithms.put("dev-key-sliding", "sliding");
         clientAlgorithms.put("dev-key-leaky", "leaky");
+        clientAlgorithms.put("dev-key-dynamic", "dynamic");
 
         // limit lowered from 5 to 3 for testing purposes
         // to trigger 429 without sending too many requests for logging
@@ -135,6 +140,7 @@ public class RateLimiter {
         clientLimits.put("dev-key-fixed", 3);
         clientLimits.put("dev-key-sliding", 3);
         clientLimits.put("dev-key-leaky", 3);
+        clientLimits.put("dev-key-dynamic", 10);
 
         // Business client
         clientAlgorithms.put("dev-key-business", "token");

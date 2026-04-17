@@ -90,7 +90,10 @@ public class MetricsService {
         }
 
         //copy and sort the list so we can pick values at specific positions
-        List<Long> sorted = new ArrayList<>(values);
+        List<Long> sorted;
+        synchronized (values) {
+            sorted = new ArrayList<>(values);
+        }
         Collections.sort(sorted);
 
         percentiles.put("p50", sorted.get((int) (sorted.size() * 0.50)));
