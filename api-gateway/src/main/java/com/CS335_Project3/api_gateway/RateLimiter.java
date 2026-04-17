@@ -205,8 +205,8 @@ public class RateLimiter {
         return clientAlgorithms.getOrDefault(clientId, "token");
     }
 
-    // Determines which algorithm to use for the App and Tenant layers,
-    // so the algorithm in the log always matches the algorithm that was actually enforced.
+    // Resolves algorithm hierarchically: App > Tenant > Client > Global.
+    // Ensures logs show the actual algorithm that was enforced.
     public String getResolvedAlgorithm(String clientId, String tenantId, String appId) {
         TenantRateLimitConfig cfg = this.tenantRateLimitConfig;
 
