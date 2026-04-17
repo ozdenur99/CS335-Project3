@@ -93,11 +93,11 @@ public class RateLimiter {
      */
     @Autowired
     public RateLimiter(TokenBucketRateLimiterStrategy tokenBucketStrategy,
-                   FixedWindowRateLimiterStrategy fixedWindowStrategy,
-                   SlidingWindowRateLimiterStrategy slidingWindowStrategy,
-                   LeakyBucketRateLimiterStrategy leakyBucketStrategy,
-                   DynamicAIMDRateLimiterStrategy dynamicAIMDRateLimiterStrategy,
-                   TenantRateLimitConfig tenantRateLimitConfig) {
+            FixedWindowRateLimiterStrategy fixedWindowStrategy,
+            SlidingWindowRateLimiterStrategy slidingWindowStrategy,
+            LeakyBucketRateLimiterStrategy leakyBucketStrategy,
+            DynamicAIMDRateLimiterStrategy dynamicAIMDRateLimiterStrategy,
+            TenantRateLimitConfig tenantRateLimitConfig) {
 
         this.tokenBucketStrategy = tokenBucketStrategy;
         this.fixedWindowStrategy = fixedWindowStrategy;
@@ -120,7 +120,7 @@ public class RateLimiter {
         strategies.put("sliding", slidingWindowStrategy);
         strategies.put("leaky", leakyBucketStrategy);
         strategies.put("dynamic", dynamicAIMDRateLimiterStrategy);
-        
+
     }
 
     /*
@@ -208,6 +208,12 @@ public class RateLimiter {
     // exposes the strategies map so ConfigController can validate algorithm names
     public Map<String, RateLimiterStrategy> getStrategies() {
         return strategies;
+    }
+
+    // clientLimits is a private map inside RateLimiter, we expose it through a public method.
+    // this allows ConfigController to read the each client's limit when config updates.
+    public int getClientLimit(String clientId) {
+        return clientLimits.getOrDefault(clientId, tenantRateLimitConfig.getDefaultLimit());
     }
 
     /**
