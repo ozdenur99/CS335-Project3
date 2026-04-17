@@ -26,63 +26,68 @@ import java.util.List;
 @Order(1)
 public class LoggingFilter extends OncePerRequestFilter {
 
-    //these paths are excluded from logging so browser generated requests
-    //like favicon.ico and metrics page loads dont pollute the metrics data
-    private static final List<String> EXCLUDED_PATHS =
-            List.of("/health", "/metrics", "/metrics/logs", "/favicon.ico");
+    // these paths are excluded from logging so browser generated requests
+    // like favicon.ico and metrics page loads dont pollute the metrics data
+    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics", "/metrics/logs", "/favicon.ico",
+            // add the paths for checking metrics to exclude them from logging or risk score calculation,
+            // otherwise every time team metrics check gets logged and counted
+            "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv",
+            "/metrics/suspicious", "/metrics/suspicious/risk",
+            "/metrics/latency", "/metrics/risk");
 
-    //we inject all 5 dependencies so we can record, measure, detect and forward on every request
+    // we inject all 5 dependencies so we can record, measure, detect and forward on
+    // every request
     private final RequestLogger requestLogger;
     private final MetricsService metricsService;
-    private final RateLimiter rateLimiter;       //used to look up which algorithm the client uses
-    private final BotDetector botDetector;       //used to flag suspicious IPs
-    private final LogForwarder logForwarder;     //used to forward logs to the backend in real time
+    private final RateLimiter rateLimiter; // used to look up which algorithm the client uses
+    private final BotDetector botDetector; // used to flag suspicious IPs
+    private final LogForwarder logForwarder; // used to forward logs to the backend in real time
 
     public LoggingFilter(RequestLogger requestLogger, MetricsService metricsService,
-                         RateLimiter rateLimiter, BotDetector botDetector,
-                         LogForwarder logForwarder) {
-        this.requestLogger  = requestLogger;
+            RateLimiter rateLimiter, BotDetector botDetector,
+            LogForwarder logForwarder) {
+        this.requestLogger = requestLogger;
         this.metricsService = metricsService;
-        this.rateLimiter    = rateLimiter;
-        this.botDetector    = botDetector;
-        this.logForwarder   = logForwarder;
+        this.rateLimiter = rateLimiter;
+        this.botDetector = botDetector;
+        this.logForwarder = logForwarder;
     }
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
-                                    @NonNull HttpServletResponse response,
-                                    @NonNull FilterChain chain)
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain chain)
             throws ServletException, IOException {
 
-        //skip logging for internal/static paths so they dont show up in metrics
+        // skip logging for internal/static paths so they dont show up in metrics
         if (EXCLUDED_PATHS.contains(request.getRequestURI())) {
             chain.doFilter(request, response);
             return;
         }
 
-        //record the start time so we can calculate how long the request took
+        // record the start time so we can calculate how long the request took
         long startTime = System.currentTimeMillis();
 
-        //wrap the response so we can always read the status after the chain finishes
-        //without this Spring sometimes commits the response before we can read it
-        ContentCachingResponseWrapper wrappedResponse =
-                new ContentCachingResponseWrapper(response);
+        // wrap the response so we can always read the status after the chain finishes
+        // without this Spring sometimes commits the response before we can read it
+        ContentCachingResponseWrapper wrappedResponse = new ContentCachingResponseWrapper(response);
 
-        //grab all the request info we need before passing it on
+        // grab all the request info we need before passing it on
         String apiKey = request.getHeader("X-API-Key");
-        String path   = request.getRequestURI();
+        String path = request.getRequestURI();
 
-        //if no key was provided label it as MISSING so it still appears in logs
+        // if no key was provided label it as MISSING so it still appears in logs
         if (apiKey == null || apiKey.isBlank()) {
             apiKey = "MISSING";
         }
 
-        //get the client IP and which rate limiting algorithm they are assigned to
-        String ip        = request.getRemoteAddr();
+        // get the client IP and which rate limiting algorithm they are assigned to
+        String ip = request.getRemoteAddr();
         String algorithm = rateLimiter.getAlgorithm(apiKey.toLowerCase());
 
-        //record the IP in BotDetector and check if it has exceeded the threshold
-        //if flagged we log it immediately and return early without forwarding the request
+        // record the IP in BotDetector and check if it has exceeded the threshold
+        // if flagged we log it immediately and return early without forwarding the
+        // request
         botDetector.record(ip);
         if (botDetector.isSuspicious(ip)) {
             long latencyMs = System.currentTimeMillis() - startTime;
@@ -94,55 +99,57 @@ public class LoggingFilter extends OncePerRequestFilter {
             wrappedResponse.setContentType("application/json");
             wrappedResponse.setCharacterEncoding("UTF-8");
             wrappedResponse.getWriter().write(String.format(
-                "{\"status\":403,\"error\":\"Forbidden\",\"message\":\"Suspicious bot activity detected.\",\"path\":\"%s\"}",
-                path
-            ));
+                    "{\"status\":403,\"error\":\"Forbidden\",\"message\":\"Suspicious bot activity detected.\",\"path\":\"%s\"}",
+                    path));
             wrappedResponse.copyBodyToResponse();
             return;
         }
 
-        //passes the wrapped response through the rest of the filter chain
-        //this runs AbuseFilter, ApiKeyFilter, RateLimiter and GatewayController
-        //everything happens inside this line after it returns we know the final outcome
+        // passes the wrapped response through the rest of the filter chain
+        // this runs AbuseFilter, ApiKeyFilter, RateLimiter and GatewayController
+        // everything happens inside this line after it returns we know the final
+        // outcome
         chain.doFilter(request, wrappedResponse);
 
-        //calculate how long the full request took in milliseconds
+        // calculate how long the full request took in milliseconds
         long latencyMs = System.currentTimeMillis() - startTime;
 
-        //read the final HTTP status code from the wrapped response
-        //this is now always reliable because the wrapper held it in memory
+        // read the final HTTP status code from the wrapped response
+        // this is now always reliable because the wrapper held it in memory
         int status = wrappedResponse.getStatus();
 
-        //map the status code to a human readable decision and reason
+        // map the status code to a human readable decision and reason
         String decision;
         String reason;
 
         if (status == 401) {
             decision = "BLOCKED";
-            reason   = "invalid_or_missing_key";
+            reason = "invalid_or_missing_key";
         } else if (status == 429) {
             decision = "BLOCKED";
-            reason   = "rate_limit_exceeded";
+            reason = "rate_limit_exceeded";
         } else if (status == 403) {
             decision = "BLOCKED";
-            reason   = "abuse_detected";
+            reason = "abuse_detected";
         } else {
             decision = "ALLOWED";
-            reason   = "ok";
+            reason = "ok";
         }
 
-        //true if the request was blocked for any reason, false if it was allowed through
+        // true if the request was blocked for any reason, false if it was allowed
+        // through
         boolean wasBlocked = decision.equals("BLOCKED");
 
-        //record the full request details in the log and update the metrics counters
+        // record the full request details in the log and update the metrics counters
         requestLogger.log(apiKey, ip, path, decision, reason, algorithm, latencyMs);
-        //pass latency and status code to MetricsService so it can track percentiles and status breakdowns
+        // pass latency and status code to MetricsService so it can track percentiles
+        // and status breakdowns
         metricsService.recordRequest(apiKey, wasBlocked, latencyMs, status);
 
-        //forward the log entry to the backend in real time
+        // forward the log entry to the backend in real time
         logForwarder.forward(new LogEntry(apiKey, ip, path, decision, reason, algorithm, latencyMs));
 
-        //copy the response body back so the client still receives it
+        // copy the response body back so the client still receives it
         wrappedResponse.copyBodyToResponse();
     }
 }
