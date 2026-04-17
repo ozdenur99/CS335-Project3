@@ -205,13 +205,35 @@ public class RateLimiter {
         return clientAlgorithms.getOrDefault(clientId, "token");
     }
 
+    // Determines which algorithm to use for the App and Tenant layers,
+    // so the algorithm in the log always matches the algorithm that was actually enforced.
+    public String getResolvedAlgorithm(String clientId, String tenantId, String appId) {
+        TenantRateLimitConfig cfg = this.tenantRateLimitConfig;
+
+        TenantRateLimitConfig.TenantPolicy tenantPolicy = (cfg != null && tenantId != null)
+                ? cfg.getTenants().get(tenantId)
+                : null;
+
+        TenantRateLimitConfig.AppPolicy appPolicy = (tenantPolicy != null && appId != null)
+                ? tenantPolicy.getApps().get(appId)
+                : null;
+
+        if (appPolicy != null && appPolicy.getAlgorithm() != null)
+            return appPolicy.getAlgorithm();
+        if (tenantPolicy != null && tenantPolicy.getAlgorithm() != null)
+            return tenantPolicy.getAlgorithm();
+        return clientAlgorithms.getOrDefault(clientId, (cfg != null) ? cfg.getDefaultAlgorithm() : "token");
+    }
+
     // exposes the strategies map so ConfigController can validate algorithm names
     public Map<String, RateLimiterStrategy> getStrategies() {
         return strategies;
     }
 
-    // clientLimits is a private map inside RateLimiter, we expose it through a public method.
-    // this allows ConfigController to read the each client's limit when config updates.
+    // clientLimits is a private map inside RateLimiter, we expose it through a
+    // public method.
+    // this allows ConfigController to read the each client's limit when config
+    // updates.
     public int getClientLimit(String clientId) {
         return clientLimits.getOrDefault(clientId, tenantRateLimitConfig.getDefaultLimit());
     }

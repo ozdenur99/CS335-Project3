@@ -29,7 +29,8 @@ public class LoggingFilter extends OncePerRequestFilter {
     // these paths are excluded from logging so browser generated requests
     // like favicon.ico and metrics page loads dont pollute the metrics data
     private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics", "/metrics/logs", "/favicon.ico",
-            // add the paths for checking metrics to exclude them from logging or risk score calculation,
+            // add the paths for checking metrics to exclude them from logging or risk score
+            // calculation,
             // otherwise every time team metrics check gets logged and counted
             "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
@@ -83,7 +84,12 @@ public class LoggingFilter extends OncePerRequestFilter {
 
         // get the client IP and which rate limiting algorithm they are assigned to
         String ip = request.getRemoteAddr();
-        String algorithm = rateLimiter.getAlgorithm(apiKey.toLowerCase());
+        String rawTenant = request.getHeader("X-Tenant-Id");
+        String rawApp = request.getHeader("X-App-Id");
+        String tenantId = (rawTenant == null || rawTenant.isBlank()) ? null : rawTenant.toLowerCase();
+        String appId = (rawApp == null || rawApp.isBlank()) ? null : rawApp.toLowerCase();
+        String algorithm = rateLimiter.getResolvedAlgorithm(apiKey.toLowerCase(), tenantId, appId);
+        // String algorithm = rateLimiter.getAlgorithm(apiKey.toLowerCase());
 
         // record the IP in BotDetector and check if it has exceeded the threshold
         // if flagged we log it immediately and return early without forwarding the
