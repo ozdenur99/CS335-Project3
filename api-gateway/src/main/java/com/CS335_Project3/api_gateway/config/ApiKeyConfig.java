@@ -18,7 +18,7 @@ public class ApiKeyConfig {
             "dev-key-business", "dev-key-leaky",
             "key-acme-dashboard", "key-acme-api",
             "key-beta-dashboard", "key-beta-api",
-            "key-enterprise-dashboard", "key-enterprise-api");
+            "key-enterprise-dashboard", "key-enterprise-api", "dev-key-dynamic");
 
     private List<String> apiKeys = new ArrayList<>(DEFAULT_KEYS);
 

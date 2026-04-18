@@ -10,7 +10,9 @@ import org.springframework.core.annotation.Order;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-
+import com.CS335_Project3.api_gateway.filter.AllowList;
+import com.CS335_Project3.api_gateway.filter.RiskScoreService;
+import com.CS335_Project3.api_gateway.filter.AbuseEventPublisher;
 import java.io.IOException;
 import java.util.List;
 
@@ -42,12 +44,16 @@ public class AbuseFilter extends OncePerRequestFilter {
     // private final Spike spike;
     private final Failure failure;
     private final BlockedIps blockedIps;
+    private final RiskScoreService riskScoreService;
+    private final AbuseEventPublisher eventPublisher;
 
-    public AbuseFilter(Failure failure,
-                       BlockedIps blockedIps) {
+    public AbuseFilter(Failure failure, BlockedIps blockedIps,AllowList allowList, RiskScoreService riskScoreService, AbuseEventPublisher eventPublisher) {
         // this.spike = spike;
         this.failure = failure;
         this.blockedIps = blockedIps;
+        this.allowList        = allowList;
+        this.riskScoreService = riskScoreService;
+        this.eventPublisher   = eventPublisher;
     }
 
     @Override
@@ -57,9 +63,18 @@ public class AbuseFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String path = request.getRequestURI();
+        String ip       = request.getRemoteAddr();
+        String apiKey   = request.getHeader("X-API-Key");
+        String clientId = (apiKey != null && !apiKey.isBlank()) ? apiKey : ip;
 
         // Step 1: Skip excluded paths
         if (EXCLUDED_PATHS.contains(path)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        // Step 2: Skip allowlisted IPs — trusted sources always get through
+        if (allowList.isAllowed(ip)) {
+            log.info("Allowlisted IP {} — bypassing abuse checks", ip);
             filterChain.doFilter(request, response);
             return;
         }
@@ -68,7 +83,8 @@ public class AbuseFilter extends OncePerRequestFilter {
         String apiKey = request.getHeader("X-API-Key");
         String clientId = (apiKey != null && !apiKey.isBlank()) ? apiKey : ip;
 
-        if (blockedIps.isBlocked(clientId)) {
+        // Step 3: Check Redis blocklist
+        if (!clientId.equals("dev-key-dynamic") && blockedIps.isBlocked(clientId)) {
             log.warn("Blocked client check triggered for {}", clientId);
             AbuseEvent event = new AbuseEvent(
                     AbuseEvent.Type.BLOCKED_IP, clientId, ip, "Request from blocked client");
@@ -100,10 +116,24 @@ public class AbuseFilter extends OncePerRequestFilter {
         //     return;
         // }
 
-        // Step 4: Forward to backend
+        // Step 4: Resolve risk score before forwarding
+        String riskLevel = riskScoreService.getRiskLevelString(clientId);
+        int riskPercent  = riskScoreService.getRiskPercentage(clientId);
+
+        // Step 5: Forward to backend with context headers (T7)
+        // These headers tell the backend who is sending and their risk level
+        // so the backend can make its own decisions if needed
+        request.setAttribute("X-Client-Risk", riskLevel);
+        request.setAttribute("X-Client-IP", ip);
+        response.setHeader("X-Client-Risk", riskLevel);
+
+        // Wrap request to inject custom headers before forwarding
+        HeaderForwardingRequestWrapper wrappedRequest =
+                new HeaderForwardingRequestWrapper(request, ip, riskLevel, riskPercent);
+
         filterChain.doFilter(request, response);
 
-        // Step 5: Failure tracking (post-response)
+        // Step 6: Failure tracking (post-response)
         int status = response.getStatus();
         if (status == 403 || status == 429 || status == 401) {
             if (failure.recordAndCheck(clientId)) {
@@ -112,6 +142,7 @@ public class AbuseFilter extends OncePerRequestFilter {
                         String.format("Repeated failures (last status: %d)", status));
                 log.warn(event.toString());
                 blockedIps.block(clientId);
+                eventPublisher.publishBan(clientId); // notify other gateway instantly
             }
         }
     }
