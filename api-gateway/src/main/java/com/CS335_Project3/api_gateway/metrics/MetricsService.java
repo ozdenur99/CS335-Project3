@@ -69,7 +69,7 @@ public class MetricsService {
 
     // overloaded method that also accepts latency and status code
     // called by LoggingFilter when we have the full request details
-    public void recordRequest(String apiKey, boolean wasBlocked, long latencyMs, int statusCode) {
+    public void recordRequest(String apiKey, boolean wasBlocked, long latencyMs, int statusCode, String gatewayId) {
         // call the base method first for the existing counters
         recordRequest(apiKey, wasBlocked);
 

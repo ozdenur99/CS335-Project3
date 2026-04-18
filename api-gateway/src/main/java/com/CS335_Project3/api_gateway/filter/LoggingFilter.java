@@ -17,6 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 import java.io.IOException;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 
 //@Component makes Spring create one single instance shared across the whole app
 //@Order(1) ensures LoggingFilter runs first and wraps the entire chain
@@ -35,6 +36,11 @@ public class LoggingFilter extends OncePerRequestFilter {
             "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
             "/metrics/latency", "/metrics/risk");
+
+            // gateway-1 is just the fallback default used when running locally 
+            // without Docker (where GATEWAY_ID env var isn't set).
+    @Value("${GATEWAY_ID:gateway-1}")
+    private String gatewayId;
 
     // we inject all 5 dependencies so we can record, measure, detect and forward on
     // every request
@@ -97,11 +103,11 @@ public class LoggingFilter extends OncePerRequestFilter {
         botDetector.record(ip);
         if (botDetector.isSuspicious(ip)) {
             long latencyMs = System.currentTimeMillis() - startTime;
-            LogEntry flaggedEntry = new LogEntry(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs);
-            requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs);
-            metricsService.recordRequest(apiKey, true, latencyMs, 0);
+            LogEntry flaggedEntry = new LogEntry(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs, gatewayId);
+            requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs, gatewayId);
+            metricsService.recordRequest(apiKey, true, latencyMs, 0, gatewayId);
             logForwarder.forward(flaggedEntry);
-            wrappedResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            wrappedResponse.setStatus(HttpServletResponse.SC_FORBIDDEN); 
             wrappedResponse.setContentType("application/json");
             wrappedResponse.setCharacterEncoding("UTF-8");
             wrappedResponse.getWriter().write(String.format(
@@ -147,13 +153,13 @@ public class LoggingFilter extends OncePerRequestFilter {
         boolean wasBlocked = decision.equals("BLOCKED");
 
         // record the full request details in the log and update the metrics counters
-        requestLogger.log(apiKey, ip, path, decision, reason, algorithm, latencyMs);
+        requestLogger.log(apiKey, ip, path, decision, reason, algorithm, latencyMs, gatewayId);
         // pass latency and status code to MetricsService so it can track percentiles
         // and status breakdowns
-        metricsService.recordRequest(apiKey, wasBlocked, latencyMs, status);
+        metricsService.recordRequest(apiKey, wasBlocked, latencyMs, status, gatewayId);
 
         // forward the log entry to the backend in real time
-        logForwarder.forward(new LogEntry(apiKey, ip, path, decision, reason, algorithm, latencyMs));
+        logForwarder.forward(new LogEntry(apiKey, ip, path, decision, reason, algorithm, latencyMs, gatewayId));
 
         // copy the response body back so the client still receives it
         wrappedResponse.copyBodyToResponse();

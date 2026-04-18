@@ -13,6 +13,7 @@ services:
     ports:
       - "8080:8080" # Host 8080 -> Container 8080
     environment:
+      - GATEWAY_ID=gateway-1
       - BACKEND_URL=http://backend:8081/api/
       # redis matches the service name already defined in docker-compose
       - REDIS_HOST=redis
@@ -33,6 +34,7 @@ services:
     ports:
       - "8082:8080" # Host 8082 -> Container 8080 (same container port as gateway1)
     environment:
+      - GATEWAY_ID=gateway-2
       - BACKEND_URL=http://backend:8081/api/
       - REDIS_HOST=redis
       - REDIS_PORT=6379
