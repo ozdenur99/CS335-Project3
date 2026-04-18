@@ -1,12 +1,13 @@
 package com.CS335_Project3.api_gateway.logging;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 
 public class LogEntry {
 
     // these are the fields that get recorded for every single request
     // they are final because a log entry should never be changed after creation
-    private final LocalDateTime timestamp; // exact time of when the request came in
+    private final Instant timestamp; 
     private final String apiKey; // the key the client used
     private final String ip; // the IP address of the client
     private final String path; // the URL the client requested
@@ -18,7 +19,7 @@ public class LogEntry {
 
     public LogEntry(String apiKey, String ip, String path, String decision,
             String reason, String algorithm, long latencyMs, String gatewayId) {
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = Instant.now();
         this.apiKey = apiKey;
         this.ip = ip;
         this.path = path;
@@ -30,7 +31,7 @@ public class LogEntry {
     }
 
     // Spring needs these parameters to convert the objects to JSON
-    public LocalDateTime getTimestamp() {
+    public Instant getTimestamp() {
         return timestamp;
     }
 

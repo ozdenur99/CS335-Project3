@@ -5,6 +5,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import java.time.LocalDateTime;
 import java.util.Map;
+import org.springframework.scheduling.annotation.Scheduled;
+import com.CS335_Project3.api_gateway.metrics.MetricsService;
 
 @Component
 public class MetricsForwarder {
