@@ -1,8 +1,93 @@
 # Server Port (API Gateway)
 server.port=8080
 
+# Backend service URL — override with env var BACKEND_URL in Docker
+backend.url=http://localhost:8081/api/
+
 # Spring Application Name
 spring.application.name=api-gateway
 
-# API Keys (comma-separated). Defaults to dev-key-alpha,dev-key-beta if not set
-# gateway.api-keys=your-key-1,your-key-2
+# Redis connection — override with env vars REDIS_HOST and REDIS_PORT in Docker
+spring.data.redis.host=${REDIS_HOST:localhost}
+spring.data.redis.port=${REDIS_PORT:6379}
+
+# Gateway Route Configuration
+# All valid API keys — copy this list to application.properties and replace with real values
+gateway.api-keys=dev-key-token,dev-key-fixed,dev-key-sliding,dev-key-leaky,dev-key-business,key-acme-dashboard,key-acme-api,key-beta-dashboard,key-beta-api,key-enterprise-dashboard,key-enterprise-api
+
+# Abuse protection — IP ban after N failures in a window
+abuse.failure.maxFailuresPerWindow=5
+abuse.failure.windowSeconds=60
+
+# Global defaults for tenant/app scoped rate limiting
+rate-limit.default-limit=5
+rate-limit.default-algorithm=token
+
+# Per-client demo rate limits
+rate-limit.clients.dev-key-token.limit=3
+rate-limit.clients.dev-key-fixed.limit=3
+rate-limit.clients.dev-key-sliding.limit=3
+rate-limit.clients.dev-key-leaky.limit=3
+rate-limit.clients.dev-key-business.limit=6
+
+# Token bucket refill behaviour
+rate-limit.token.refill-tokens=5
+rate-limit.token.refill-period-ms=120000
+
+# Leaky bucket leak behaviour
+rate-limit.leaky.leak-units=3
+rate-limit.leaky.leak-period-ms=10000
+
+# Sliding window size (milliseconds)
+rate-limit.sliding.window-ms=30000
+
+# Redis TTLs for rate limiter state (seconds)
+rate-limit.redis.token.ttl-seconds=300
+rate-limit.redis.fixed.ttl-seconds=30
+rate-limit.redis.sliding.ttl-seconds=300
+rate-limit.redis.leaky.ttl-seconds=300
+
+# Tenant: tenant-acme
+rate-limit.tenants.tenant-acme.limit=30
+rate-limit.tenants.tenant-acme.algorithm=token
+rate-limit.tenants.tenant-acme.enabled=true
+
+# App: dashboard inside tenant-acme
+rate-limit.tenants.tenant-acme.apps.dashboard.limit=10
+rate-limit.tenants.tenant-acme.apps.dashboard.algorithm=token
+rate-limit.tenants.tenant-acme.apps.dashboard.enabled=true
+
+# App: api inside tenant-acme
+rate-limit.tenants.tenant-acme.apps.api.limit=20
+rate-limit.tenants.tenant-acme.apps.api.algorithm=fixed
+rate-limit.tenants.tenant-acme.apps.api.enabled=true
+
+# Tenant: tenant-beta
+rate-limit.tenants.tenant-beta.limit=15
+rate-limit.tenants.tenant-beta.algorithm=sliding
+rate-limit.tenants.tenant-beta.enabled=true
+
+# App: dashboard inside tenant-beta
+rate-limit.tenants.tenant-beta.apps.dashboard.limit=15
+rate-limit.tenants.tenant-beta.apps.dashboard.algorithm=sliding
+rate-limit.tenants.tenant-beta.apps.dashboard.enabled=true
+
+# App: api inside tenant-beta
+rate-limit.tenants.tenant-beta.apps.api.limit=25
+rate-limit.tenants.tenant-beta.apps.api.algorithm=leaky
+rate-limit.tenants.tenant-beta.apps.api.enabled=true
+
+# Tenant: tenant-enterprise
+rate-limit.tenants.tenant-enterprise.limit=50
+rate-limit.tenants.tenant-enterprise.algorithm=fixed
+rate-limit.tenants.tenant-enterprise.enabled=true
+
+# App: dashboard inside tenant-enterprise
+rate-limit.tenants.tenant-enterprise.apps.dashboard.limit=20
+rate-limit.tenants.tenant-enterprise.apps.dashboard.algorithm=fixed
+rate-limit.tenants.tenant-enterprise.apps.dashboard.enabled=true
+
+# App: api inside tenant-enterprise
+rate-limit.tenants.tenant-enterprise.apps.api.limit=50
+rate-limit.tenants.tenant-enterprise.apps.api.algorithm=token
+rate-limit.tenants.tenant-enterprise.apps.api.enabled=true

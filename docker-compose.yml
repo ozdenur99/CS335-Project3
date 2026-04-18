@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   backend:
@@ -9,18 +7,42 @@ services:
     networks:
       - cs335-net
 
-  gateway:
+  # --- Node 1 ---
+  gateway1:
     build: ./api-gateway
     ports:
-      - "8080:8080"
+      - "8080:8080" # Host 8080 -> Container 8080
     environment:
+      - GATEWAY_ID=gateway-1
       - BACKEND_URL=http://backend:8081/api/
       # redis matches the service name already defined in docker-compose
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - backend
-      - redis
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - cs335-net
+
+  # Shared Memory (Redis): Because the REDIS_HOST=redis is identical for both, 
+  # they share the Blacklist and the Rate Limit Buckets counters.
+  # --- Node 2 ---  
+  gateway2:
+    build: ./api-gateway
+    ports:
+      - "8082:8080" # Host 8082 -> Container 8080 (same container port as gateway1)
+    environment:
+      - GATEWAY_ID=gateway-2
+      - BACKEND_URL=http://backend:8081/api/
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - cs335-net
 
@@ -28,8 +50,18 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - cs335-net
+volumes:
+  redis-data:
 
 networks:
   cs335-net:
