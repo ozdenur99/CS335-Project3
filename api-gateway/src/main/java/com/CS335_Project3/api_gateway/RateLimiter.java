@@ -97,7 +97,8 @@ public class RateLimiter {
             SlidingWindowRateLimiterStrategy slidingWindowStrategy,
             LeakyBucketRateLimiterStrategy leakyBucketStrategy,
             DynamicAIMDRateLimiterStrategy dynamicAIMDRateLimiterStrategy,
-            TenantRateLimitConfig tenantRateLimitConfig) {
+            TenantRateLimitConfig tenantRateLimitConfig,
+            StringRedisTemplate redis) {
 
         this.tokenBucketStrategy = tokenBucketStrategy;
         this.fixedWindowStrategy = fixedWindowStrategy;
