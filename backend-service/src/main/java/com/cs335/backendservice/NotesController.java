@@ -6,7 +6,6 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/{guid}/notes")
 public class NotesController {
-
     private Map<String, List<Note>> notesStorage = new HashMap<>();
 
     @GetMapping

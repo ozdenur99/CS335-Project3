@@ -1,0 +1,85 @@
+package com.CS335_Project3.api_gateway.filter;
+
+import com.CS335_Project3.api_gateway.config.AbuseDetectionConfig;
+import org.springframework.stereotype.Component;
+
+/**
+ * Calculates a risk level for each API key client based on their
+ * current failure count relative to the blocking threshold.
+ *
+ * RISK LEVELS:
+ *   LOW    — failure count >= abuse.risk.lowThreshold (default 2)
+ *   MEDIUM — failure count >= abuse.risk.mediumThreshold (default 4)
+ *   HIGH   — failure count >= abuse.failure.maxFailuresPerWindow (default 5)
+ *   NONE   — no failures recorded
+ *
+ * WHY THIS IS USEFUL:
+ * The dashboard can show which clients are approaching the block
+ * threshold before they actually get blocked. A client at HIGH risk
+ * is one failure away from being banned — the admin can investigate
+ * proactively rather than reactively.
+ *
+ * This also feeds into T7 (header forwarding) — the backend receives
+ * the client's risk level as X-Client-Risk so it can make its own
+ * decisions about how to handle the request.
+ */
+@Component
+public class RiskScoreService {
+
+    public enum RiskLevel {
+        NONE, LOW, MEDIUM, HIGH
+    }
+
+    private final Failure failure;
+    private final AbuseDetectionConfig config;
+
+    public RiskScoreService(Failure failure, AbuseDetectionConfig config) {
+        this.failure = failure;
+        this.config = config;
+    }
+
+    /**
+     * Returns the risk level for a given client based on their
+     * current failure count within the active window.
+     *
+     * @param clientId API key or IP address
+     * @return NONE, LOW, MEDIUM, or HIGH
+     */
+    public RiskLevel getRiskLevel(String clientId) {
+        int count = failure.getFailureCount(clientId);
+        int max   = config.getFailure().getMaxFailuresPerWindow();
+
+        if (count >= max) {
+            return RiskLevel.HIGH;
+        } else if (count >= config.getRisk().getMediumThreshold()) {
+            return RiskLevel.MEDIUM;
+        } else if (count >= config.getRisk().getLowThreshold()) {
+            return RiskLevel.LOW;
+        } else {
+            return RiskLevel.NONE;
+        }
+    }
+
+    /**
+     * Returns the risk level as a plain string for use in HTTP headers.
+     * e.g. "HIGH", "MEDIUM", "LOW", "NONE"
+     *
+     * @param clientId API key or IP address
+     */
+    public String getRiskLevelString(String clientId) {
+        return getRiskLevel(clientId).name();
+    }
+
+    /**
+     * Returns a percentage score (0-100) showing how close the client
+     * is to being blocked. Useful for dashboard gauges.
+     *
+     * @param clientId API key or IP address
+     */
+    public int getRiskPercentage(String clientId) {
+        int count = failure.getFailureCount(clientId);
+        int max   = config.getFailure().getMaxFailuresPerWindow();
+        if (max == 0) return 0;
+        return Math.min(100, (count * 100) / max);
+    }
+}

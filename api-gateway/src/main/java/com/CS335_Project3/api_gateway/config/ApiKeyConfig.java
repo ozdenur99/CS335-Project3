@@ -12,11 +12,11 @@ import java.util.List;
 @ConfigurationProperties(prefix = "gateway")
 public class ApiKeyConfig {
 
-    // Fallback keys used when application.properties is missing or api-keys is empty.
+    // Fallback keys used when application.properties is missing or api-keys is
+    // empty.
     // These are for local development only — never put real keys here.
     private static final List<String> DEFAULT_KEYS = List.of("dev-key-token", "dev-key-fixed", "dev-key-sliding",
-            "dev-key-business", "dev-key-leaky",
-            "key-acme-dashboard", "key-acme-api",
+            "dev-key-business", "dev-key-leaky", "dev-key-dynamic", "key-acme-dashboard", "key-acme-api",
             "key-beta-dashboard", "key-beta-api",
             "key-enterprise-dashboard", "key-enterprise-api", "dev-key-dynamic");
 
@@ -35,8 +35,10 @@ public class ApiKeyConfig {
     }
 
     // Uses @ConfigurationProperties(prefix = "gateway"),
-    // so Spring will bind gateway.admin-key to a field named adminKey automatically.
-    // expose admin key in ApiKeyConfig so it can be used for admin operations like managing rate limits.
+    // so Spring will bind gateway.admin-key to a field named adminKey
+    // automatically.
+    // expose admin key in ApiKeyConfig so it can be used for admin operations like
+    // managing rate limits.
     private String adminKey = "admin-secret-key"; // fallback default
 
     public String getAdminKey() {

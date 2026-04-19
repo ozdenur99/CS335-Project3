@@ -23,6 +23,8 @@ public class AbuseDetectionConfig {
 
 
     private Failure failure = new Failure();
+    private Redis redis = new Redis();
+    private Risk risk = new Risk();
 
     /** How long an IP stays blocked before being automatically unblocked (seconds). */
     private int blockDurationSeconds = 300; // 5 minutes default

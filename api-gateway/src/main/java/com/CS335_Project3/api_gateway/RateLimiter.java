@@ -9,6 +9,7 @@ import com.CS335_Project3.api_gateway.ratelimiter.TokenBucketRateLimiterStrategy
 import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.SlidingWindowRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.LeakyBucketRateLimiterStrategy;
+import com.CS335_Project3.api_gateway.ratelimiter.DynamicAIMDRateLimiterStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PostConstruct;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -40,6 +41,7 @@ public class RateLimiter {
     private final FixedWindowRateLimiterStrategy fixedWindowStrategy;
     private final SlidingWindowRateLimiterStrategy slidingWindowStrategy;
     private final LeakyBucketRateLimiterStrategy leakyBucketStrategy;
+    private final DynamicAIMDRateLimiterStrategy dynamicAIMDRateLimiterStrategy;
 
     // Config for hierarchical policies
     private final TenantRateLimitConfig tenantRateLimitConfig;
@@ -94,6 +96,7 @@ public class RateLimiter {
             FixedWindowRateLimiterStrategy fixedWindowStrategy,
             SlidingWindowRateLimiterStrategy slidingWindowStrategy,
             LeakyBucketRateLimiterStrategy leakyBucketStrategy,
+            DynamicAIMDRateLimiterStrategy dynamicAIMDRateLimiterStrategy,
             TenantRateLimitConfig tenantRateLimitConfig,
             StringRedisTemplate redis) {
 
@@ -101,6 +104,7 @@ public class RateLimiter {
         this.fixedWindowStrategy = fixedWindowStrategy;
         this.slidingWindowStrategy = slidingWindowStrategy;
         this.leakyBucketStrategy = leakyBucketStrategy;
+        this.dynamicAIMDRateLimiterStrategy = dynamicAIMDRateLimiterStrategy;
         this.tenantRateLimitConfig = tenantRateLimitConfig;
         this.redis = redis;
 
@@ -116,6 +120,7 @@ public class RateLimiter {
         strategies.put("fixed", fixedWindowStrategy);
         strategies.put("sliding", slidingWindowStrategy);
         strategies.put("leaky", leakyBucketStrategy);
+        strategies.put("dynamic", dynamicAIMDRateLimiterStrategy);
 
     }
 
@@ -128,6 +133,7 @@ public class RateLimiter {
         clientAlgorithms.put("dev-key-fixed", "fixed");
         clientAlgorithms.put("dev-key-sliding", "sliding");
         clientAlgorithms.put("dev-key-leaky", "leaky");
+        clientAlgorithms.put("dev-key-dynamic", "dynamic");
 
         // limit lowered from 5 to 3 for testing purposes
         // to trigger 429 without sending too many requests for logging
@@ -135,6 +141,7 @@ public class RateLimiter {
         clientLimits.put("dev-key-fixed", 3);
         clientLimits.put("dev-key-sliding", 3);
         clientLimits.put("dev-key-leaky", 3);
+        clientLimits.put("dev-key-dynamic", 10);
 
         // Business client
         clientAlgorithms.put("dev-key-business", "token");
@@ -199,9 +206,37 @@ public class RateLimiter {
         return clientAlgorithms.getOrDefault(clientId, "token");
     }
 
+    // Resolves algorithm hierarchically: App > Tenant > Client > Global.
+    // Ensures logs show the actual algorithm that was enforced.
+    public String getResolvedAlgorithm(String clientId, String tenantId, String appId) {
+        TenantRateLimitConfig cfg = this.tenantRateLimitConfig;
+
+        TenantRateLimitConfig.TenantPolicy tenantPolicy = (cfg != null && tenantId != null)
+                ? cfg.getTenants().get(tenantId)
+                : null;
+
+        TenantRateLimitConfig.AppPolicy appPolicy = (tenantPolicy != null && appId != null)
+                ? tenantPolicy.getApps().get(appId)
+                : null;
+
+        if (appPolicy != null && appPolicy.getAlgorithm() != null)
+            return appPolicy.getAlgorithm();
+        if (tenantPolicy != null && tenantPolicy.getAlgorithm() != null)
+            return tenantPolicy.getAlgorithm();
+        return clientAlgorithms.getOrDefault(clientId, (cfg != null) ? cfg.getDefaultAlgorithm() : "token");
+    }
+
     // exposes the strategies map so ConfigController can validate algorithm names
     public Map<String, RateLimiterStrategy> getStrategies() {
         return strategies;
+    }
+
+    // clientLimits is a private map inside RateLimiter, we expose it through a
+    // public method.
+    // this allows ConfigController to read the each client's limit when config
+    // updates.
+    public int getClientLimit(String clientId) {
+        return clientLimits.getOrDefault(clientId, tenantRateLimitConfig.getDefaultLimit());
     }
 
     /**

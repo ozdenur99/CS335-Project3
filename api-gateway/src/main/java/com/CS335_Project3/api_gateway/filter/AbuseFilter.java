@@ -10,24 +10,20 @@ import org.springframework.core.annotation.Order;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import com.CS335_Project3.api_gateway.filter.AllowList;
-import com.CS335_Project3.api_gateway.filter.RiskScoreService;
-import com.CS335_Project3.api_gateway.filter.AbuseEventPublisher;
+
 import java.io.IOException;
 import java.util.List;
 
 /**
- * WHAT THIS RETURNS:
- *   429 spike detected
- *   403 blocked IP
+ * Abuse detection filter. Runs second in the filter chain
  *
  * DETECTION FLOW:
- *   1. Skip /health and /metrics
- *   2. Blocked IP check -- 403, stop
- *   3. Spike detection -- 429, auto-block IP, stop
- *   4. Forward to backend
- *   5. Failure tracking, if response was 429 or 403, record it.
- *      If threshold exceeded, auto-block IP
+ *   1. Skip excluded paths
+ *   2. Skip allowlisted IPs
+ *   3. Check Redis blocklist → 403 if blocked
+ *   4. Resolve risk score
+ *   5. Forward to backend with risk headers
+ *   6. Post-response failure tracking → block + Pub/Sub if threshold exceeded
  */
 @Component
 //changed to @Order(2) as it caused requests to be blocked before logging could happen
@@ -44,6 +40,7 @@ public class AbuseFilter extends OncePerRequestFilter {
     // private final Spike spike;
     private final Failure failure;
     private final BlockedIps blockedIps;
+    private final AllowList allowList;
     private final RiskScoreService riskScoreService;
     private final AbuseEventPublisher eventPublisher;
 
@@ -79,11 +76,8 @@ public class AbuseFilter extends OncePerRequestFilter {
             return;
         }
 
-        String ip = request.getRemoteAddr();
-        String apiKey = request.getHeader("X-API-Key");
-        String clientId = (apiKey != null && !apiKey.isBlank()) ? apiKey : ip;
-
         // Step 3: Check Redis blocklist
+        // dev-key-dynamic is exempt — used by  AIMD rate limiter tests
         if (!clientId.equals("dev-key-dynamic") && blockedIps.isBlocked(clientId)) {
             log.warn("Blocked client check triggered for {}", clientId);
             AbuseEvent event = new AbuseEvent(
@@ -119,19 +113,11 @@ public class AbuseFilter extends OncePerRequestFilter {
         // Step 4: Resolve risk score before forwarding
         String riskLevel = riskScoreService.getRiskLevelString(clientId);
         int riskPercent  = riskScoreService.getRiskPercentage(clientId);
-
-        // Step 5: Forward to backend with context headers (T7)
-        // These headers tell the backend who is sending and their risk level
-        // so the backend can make its own decisions if needed
-        request.setAttribute("X-Client-Risk", riskLevel);
-        request.setAttribute("X-Client-IP", ip);
-        response.setHeader("X-Client-Risk", riskLevel);
-
-        // Wrap request to inject custom headers before forwarding
+        // Step 5: Forward to backend with risk headers (T7)
         HeaderForwardingRequestWrapper wrappedRequest =
                 new HeaderForwardingRequestWrapper(request, ip, riskLevel, riskPercent);
 
-        filterChain.doFilter(request, response);
+        filterChain.doFilter(wrappedRequest, response);
 
         // Step 6: Failure tracking (post-response)
         int status = response.getStatus();

@@ -8,10 +8,21 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import com.CS335_Project3.api_gateway.filter.AbuseEventSubscriber;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 
 @Configuration
 public class RedisConfig {
+    // 1. Define the ConnectionFactory as a proper Bean
+    // This allows Spring to manage its lifecycle and inject it elsewhere
+    @Bean
+    public RedisConnectionFactory redisConnectionFactory(
+            @Value("${REDIS_HOST:redis}") String redisHost,
+            @Value("${REDIS_PORT:6379}") int redisPort) {
+        return new LettuceConnectionFactory(redisHost, redisPort);
+    }
 
+    // 2. Inject the factory bean defined above
     @Bean
     public RedisTemplate<String, String> redisTemplate(RedisConnectionFactory factory) {
         RedisTemplate<String, String> template = new RedisTemplate<>();
@@ -32,7 +43,7 @@ public class RedisConfig {
 
     // Registers the Pub/Sub listener so this gateway reacts to config-reload messages.
     // When any gateway POSTs to /admin/config, all gateways reload instantly.
-    @Bean
+    @Bean(destroyMethod = "destroy")
     public RedisMessageListenerContainer redisMessageListenerContainer(
             RedisConnectionFactory factory,
             ConfigReloadListener listener,
