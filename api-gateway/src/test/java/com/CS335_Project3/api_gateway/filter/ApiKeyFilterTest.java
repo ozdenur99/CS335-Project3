@@ -27,11 +27,12 @@ class ApiKeyFilterTest {
         ApiKeyConfig config = new ApiKeyConfig();
         // Update to match actual keys used in application.properties
         config.setApiKeys(List.of(
-                "dev-key-token", // Token Bucket Algorithm, Limit: 5
-                "dev-key-fixed", // Fixed Window Algorithm, Limit: 5
-                "dev-key-sliding", // Sliding Window Algorithm, Limit: 5
-                "dev-key-business" // Token Bucket Algorithm, Limit: 10
-        ));
+                "dev-key-token", "dev-key-fixed", "dev-key-sliding",
+                "dev-key-leaky", "dev-key-business",
+                "key-acme-dashboard", "key-acme-api",
+                "key-beta-dashboard", "key-beta-api",
+                "key-enterprise-dashboard", "key-enterprise-api"));
+
         RateLimiter rateLimiter = mock(RateLimiter.class);
         when(rateLimiter.isRequestAllowed(anyString(), any(), any())).thenReturn(true);
         filter = new ApiKeyFilter(config, rateLimiter);
@@ -68,7 +69,7 @@ class ApiKeyFilterTest {
         assertThat(chain.getRequest()).isNull(); // chain was NOT called
         // correct (matches what ApiKeyFilter actually sends):
         assertThat(response.getContentAsString())
-            .contains("Request could not be authorised");
+                .contains("Request could not be authorised");
     }
 
     @Test

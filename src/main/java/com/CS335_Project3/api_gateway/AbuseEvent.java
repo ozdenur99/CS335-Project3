@@ -1,7 +1,12 @@
-package com.CS335_Project3.api_gateway.filter;
+package com.CS335_Project3.api_gateway;
 
 import java.time.Instant;
 
+/**
+ * Represents a detected abuse event.
+ * Contains everything the logger needs:
+ * type (what kind of abuse was detected), clientId (the API key (or IP if no key present)), ip, timestamp etc.
+ */
 public class AbuseEvent {
 
     public enum Type {

@@ -1,6 +1,5 @@
 package com.CS335_Project3.api_gateway;
 
-
 import com.CS335_Project3.api_gateway.config.TenantRateLimitConfig;
 import com.CS335_Project3.api_gateway.ratelimiter.TokenBucketRateLimiterStrategy;
 import com.CS335_Project3.api_gateway.ratelimiter.FixedWindowRateLimiterStrategy;
@@ -24,10 +23,10 @@ class RateLimiterTest {
         TokenBucketRateLimiterStrategy token = mock(TokenBucketRateLimiterStrategy.class);
         FixedWindowRateLimiterStrategy fixed = mock(FixedWindowRateLimiterStrategy.class);
         SlidingWindowRateLimiterStrategy sliding = mock(SlidingWindowRateLimiterStrategy.class);
-        LeakyBucketRateLimiterStrategy leaky = mock(LeakyBucketRateLimiterStrategy.class);  
+        LeakyBucketRateLimiterStrategy leaky = mock(LeakyBucketRateLimiterStrategy.class);
 
         TenantRateLimitConfig config = new TenantRateLimitConfig();
-        
+
         config.setDefaultLimit(3);
         config.setDefaultAlgorithm("token");
 
@@ -41,7 +40,9 @@ class RateLimiterTest {
             return next <= limit;
         });
 
-        rateLimiter = new RateLimiter(token, fixed, sliding, leaky, config);
+        org.springframework.data.redis.core.StringRedisTemplate redis = mock(
+                org.springframework.data.redis.core.StringRedisTemplate.class);
+        rateLimiter = new RateLimiter(token, fixed, sliding, leaky, config, redis);
     }
 
     @Test
