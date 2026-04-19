@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import java.util.Collections;
 import java.util.stream.Collectors;
 
 //@Component makes Spring create one single instance shared across the whole app
@@ -99,7 +100,7 @@ public class BotDetector {
         }
 
         // for (String ip : suspiciousIps) {
-        for (String IP : allIps) {
+        for (String ip : allIps) {
             String level = getRiskLevel(ip);
             if (grouped.containsKey(level)) {
                 grouped.get(level).add(ip);
@@ -141,10 +142,11 @@ public class BotDetector {
         // suspiciousIps.clear();
         Set<String> allIps = redis.opsForSet().members(IP_SET_KEY);
         if (allIps != null && !allIps.isEmpty()) {
-            // Delete individual counter keys
-            List<String> keysToDelete = allIps.stream()
-                    .map(ip -> COUNT_PREFIX + ip)
-                    .collect(Collectors.toList());
+            // create a list of keys to delete for all IP counts
+            List<String> keysToDelete = new ArrayList<>();
+            for (String ip : allIps) {
+                keysToDelete.add(COUNT_PREFIX + ip);
+            }
             redis.delete(keysToDelete);
         }
         // Delete the master IP set
