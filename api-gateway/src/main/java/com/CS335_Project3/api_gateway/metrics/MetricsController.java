@@ -147,8 +147,13 @@ public class MetricsController {
 
     @GetMapping("/timeseries")
     public ResponseEntity<?> getTimeseries(
-            @RequestParam(defaultValue = "week") String range) {
-        String url = backendUrl + "logs/metrics/timeseries?range=" + range;
+            @RequestParam(defaultValue = "week") String range,
+            // add from and to params and forward them in the proxy URL:
+            @RequestParam(required = false) Long from,
+            @RequestParam(required = false) Long to) {
+        String url = backendUrl + "logs/metrics/timeseries?range=" + range
+        + (from != null ? "&from=" + from : "")
+        + (to != null ? "&to=" + to : "");
         return ResponseEntity.ok(restTemplate.getForObject(url, List.class));
     }
 }

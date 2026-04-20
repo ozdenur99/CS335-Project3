@@ -66,16 +66,25 @@ public class LogController {
     @GetMapping("/metrics/timeseries")
     public List<Map<String, Object>> getTimeseries(
             @RequestParam(defaultValue = "week") String range,
-            @RequestParam(required = false) String gatewayId) {
+            @RequestParam(required = false) String gatewayId,
+            // Optional from and to parameters for custom date range filtering (timestamps in ms)
+            // from and to are epoch milliseconds. When provided they take priority over range. 
+            @RequestParam(required = false) Long from,
+            @RequestParam(required = false) Long to) {
 
-        long cutoff = range.equals("month")
-                ? Instant.now().minus(30, ChronoUnit.DAYS).toEpochMilli()
-                : Instant.now().minus(7, ChronoUnit.DAYS).toEpochMilli();
+        // To allow custom date ranges, add from and to params to the existing endpoint
+        long cutoff = (from != null) ? from
+                : (range.equals("month")
+                        ? Instant.now().minus(30, ChronoUnit.DAYS).toEpochMilli()
+                        : Instant.now().minus(7, ChronoUnit.DAYS).toEpochMilli());
+
+        long ceiling = (to != null) ? to : Instant.now().toEpochMilli();
 
         return metricsHistory.stream()
                 .filter(s -> s.get("timestamp") != null
-                && ((Number) s.get("timestamp")).longValue() >= cutoff)
-        .filter(s -> gatewayId == null || gatewayId.equals(s.get("gatewayId")))
-        .collect(Collectors.toList());
+                        && ((Number) s.get("timestamp")).longValue() >= cutoff
+                        && ((Number) s.get("timestamp")).longValue() <= ceiling)
+                .filter(s -> gatewayId == null || gatewayId.equals(s.get("gatewayId")))
+                .collect(Collectors.toList());
     }
 }
