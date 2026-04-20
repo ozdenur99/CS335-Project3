@@ -4,6 +4,14 @@ services:
     build: ./backend-service
     ports:
       - "8081:8081"
+    # These environment variables allow the backend to connect to Redis.
+    # The backend will use these to connect to the Redis service for storing logs and metrics.  
+    environment:
+    - REDIS_HOST=redis
+    - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - cs335-net
 
