@@ -18,7 +18,7 @@ public class ApiKeyConfig {
     private static final List<String> DEFAULT_KEYS = List.of("dev-key-token", "dev-key-fixed", "dev-key-sliding",
             "dev-key-business", "dev-key-leaky", "dev-key-dynamic", "key-acme-dashboard", "key-acme-api",
             "key-beta-dashboard", "key-beta-api",
-            "key-enterprise-dashboard", "key-enterprise-api");
+            "key-enterprise-dashboard", "key-enterprise-api", "dev-key-dynamic");
 
     private List<String> apiKeys = new ArrayList<>(DEFAULT_KEYS);
 

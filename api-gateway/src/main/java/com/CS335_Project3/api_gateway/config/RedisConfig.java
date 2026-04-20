@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import com.CS335_Project3.api_gateway.filter.AbuseEventSubscriber;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 
@@ -45,10 +46,14 @@ public class RedisConfig {
     @Bean(destroyMethod = "destroy")
     public RedisMessageListenerContainer redisMessageListenerContainer(
             RedisConnectionFactory factory,
-            ConfigReloadListener listener) {
+            ConfigReloadListener listener,
+            AbuseEventSubscriber abuseEventSubscriber,
+            AbuseDetectionConfig abuseDetectionConfig) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(factory);
         container.addMessageListener(listener, new ChannelTopic("config-reload"));
+        container.addMessageListener(abuseEventSubscriber,
+                new ChannelTopic(abuseDetectionConfig.getRedis().getChannel()));
         return container;
     }
 }
