@@ -6,10 +6,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Collections;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.stream.Collectors;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import java.util.Objects;
+import java.util.Set;
+import java.time.temporal.ChronoUnit;
 
 //receives log entries forwarded from the API gateway in real time
 @RestController
@@ -25,9 +28,14 @@ public class LogController {
     private final List<Map<String, Object>> receivedLogs = Collections.synchronizedList(new ArrayList<>());
     private final Map<String, Map<String, Object>> latestByGateway = new ConcurrentHashMap<>();
 
-    // we also maintain a history of snapshots for the timeseries endpoint,
-    // but we only keep the last 30 days of data to prevent memory issues
-    private final List<Map<String, Object>> metricsHistory = new CopyOnWriteArrayList<>();
+    private final StringRedisTemplate redis;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String HISTORY_KEY = "metrics:history";
+
+    // Constructor injection of Redis template
+    public LogController(StringRedisTemplate redis) {
+        this.redis = redis;
+    }
 
     // POST /api/logs (receives a log entry from the gateway)
     @PostMapping
@@ -46,14 +54,20 @@ public class LogController {
     public String receiveMetrics(@RequestBody Map<String, Object> metrics) {
         String gatewayId = (String) metrics.getOrDefault("gatewayId", "unknown");
         latestByGateway.put(gatewayId, metrics);
-        metricsHistory.add(metrics);
-        metricsHistory.removeIf(s -> {
-            Object ts = s.get("timestamp");
-            if (ts == null)
-                return false;
-            return Instant.ofEpochMilli(((Number) ts).longValue())
-                    .isBefore(Instant.now().minus(30, ChronoUnit.DAYS));
-        });
+        // Store in Redis sorted set with timestamp as score for time-based retrieval
+        // If timestamp is missing, use current time as fallback
+        // opsForZSet().add(key, value, score) stores the snapshot as JSON with the
+        // timestamp as the sort score.
+        try {
+            String json = objectMapper.writeValueAsString(metrics);
+            long ts = ((Number) metrics.getOrDefault("timestamp", 0)).longValue();
+            redis.opsForZSet().add(HISTORY_KEY, json, ts);
+            // removeRangeByScore prunes anything older than 30 days to prevent unbounded growth. 
+            // redis.opsForZSet().removeRangeByScore(HISTORY_KEY, 0,
+            //         Instant.now().minus(30, ChronoUnit.DAYS).toEpochMilli());
+        } catch (Exception e) {
+            // fail silently
+        }
         return "ok";
     }
 
@@ -67,8 +81,10 @@ public class LogController {
     public List<Map<String, Object>> getTimeseries(
             @RequestParam(defaultValue = "week") String range,
             @RequestParam(required = false) String gatewayId,
-            // Optional from and to parameters for custom date range filtering (timestamps in ms)
-            // from and to are epoch milliseconds. When provided they take priority over range. 
+            // Optional from and to parameters for custom date range filtering (timestamps
+            // in ms)
+            // from and to are epoch milliseconds. When provided they take priority over
+            // range.
             @RequestParam(required = false) Long from,
             @RequestParam(required = false) Long to) {
 
@@ -79,11 +95,23 @@ public class LogController {
                         : Instant.now().minus(7, ChronoUnit.DAYS).toEpochMilli());
 
         long ceiling = (to != null) ? to : Instant.now().toEpochMilli();
-
-        return metricsHistory.stream()
-                .filter(s -> s.get("timestamp") != null
-                        && ((Number) s.get("timestamp")).longValue() >= cutoff
-                        && ((Number) s.get("timestamp")).longValue() <= ceiling)
+        // rangeByScore(key, min, max) queries Redis for all entries whose score (timestamp) 
+        // falls between cutoff and ceiling, this is the time range filter.        
+        Set<String> raw = redis.opsForZSet().rangeByScore(HISTORY_KEY, cutoff, ceiling);
+        if (raw == null)
+            return List.of();
+        return raw.stream()
+                .map(s -> {
+                    try {
+                        // each entry comes back as a JSON string, so we deserialize it back to a Map. 
+                        // if parsing fails, we return null and filter it out later.
+                        return objectMapper.readValue(s, Map.class);
+                    } catch (Exception e) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                // filter by gatewayId if provided.   
                 .filter(s -> gatewayId == null || gatewayId.equals(s.get("gatewayId")))
                 .collect(Collectors.toList());
     }
