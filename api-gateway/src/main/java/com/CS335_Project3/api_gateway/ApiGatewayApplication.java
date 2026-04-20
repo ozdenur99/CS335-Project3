@@ -7,17 +7,29 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 
+// enables @Scheduled methods: MetricsExporter snapshots + RateLimiter Redis health check
 @SpringBootApplication
-@EnableScheduling  //added so @Scheduled in MetricsExporter.java runs automatically
+@EnableScheduling
 public class ApiGatewayApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(ApiGatewayApplication.class, args);
     }
-    
+
     @Bean
     public RestTemplate restTemplate() {
-        return new RestTemplate();
+        // serializes LocalDateTime as an array in the RestTemplate to handle Java 8 date/time types in our logging,
+        // so forwarded logs show readable timestamps like "2026-04-17T10:30:00"
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter(mapper);
+        RestTemplate restTemplate = new RestTemplate();
+        restTemplate.getMessageConverters().removeIf(c -> c instanceof MappingJackson2HttpMessageConverter);
+        restTemplate.getMessageConverters().add(0, converter);
+        return restTemplate;
     }
 }

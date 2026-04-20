@@ -26,8 +26,8 @@ public class GatewayController {
     }
 
     @GetMapping
-    public String getNotes(@PathVariable String guid) {
-        return restTemplate.getForObject(BACKEND_URL + guid + "/notes", String.class);
+    public Object getNotes(@PathVariable String guid) {
+        return restTemplate.getForObject(BACKEND_URL + guid + "/notes", Object.class);
     }
 
     @PostMapping
