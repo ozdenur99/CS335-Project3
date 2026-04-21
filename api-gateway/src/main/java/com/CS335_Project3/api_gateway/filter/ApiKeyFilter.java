@@ -36,10 +36,10 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
             "/metrics/latency", "/metrics/risk", "/favicon.ico",
-            "/metrics/timeseries", "/metrics/clients");   
+            "/metrics/timeseries", "/metrics/clients");
 
     private static final String ADMIN_KEY_HEADER = "X-Admin-Key";
-    private final ApiKeyConfig apiKeyConfig; 
+    private final ApiKeyConfig apiKeyConfig;
     private final RateLimiter rateLimiter;
 
     public ApiKeyFilter(ApiKeyConfig apiKeyConfig, RateLimiter rateLimiter) {
@@ -119,6 +119,11 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         response.setStatus(status);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
+        // For 429 Too Many Requests, include a Retry-After header 
+        // to indicate when the client can try again.        
+        if (status == 429) {
+            response.setHeader("Retry-After", "10");
+        }
         response.getWriter().write(String.format(
                 "{\"status\":%d,\"error\":\"%s\",\"message\":\"%s\",\"path\":\"%s\"}",
                 status,
