@@ -11,6 +11,8 @@ import java.util.Map;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import java.util.Collections;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 //@Component makes Spring create one single instance shared across the whole app
 
@@ -33,7 +35,8 @@ public class BotDetector {
     private static final int LOW_RISK_THRESHOLD = 50;
     private static final int MEDIUM_RISK_THRESHOLD = 100;
     private static final int HIGH_RISK_THRESHOLD = 200;
-
+    // Logger for debugging and monitoring
+    private static final Logger log = LoggerFactory.getLogger(BotDetector.class);
     // Redis Key Constants
     private static final String COUNT_PREFIX = "bot:count:";
     private static final String IP_SET_KEY = "bot:all_ips";
@@ -58,18 +61,27 @@ public class BotDetector {
      * Also tracks the IP in a centralized Set for easy retrieval.
      */
     public void record(String ip) {
+        try{ 
         String countKey = COUNT_PREFIX + ip;
         // Increment the individual counter
         redis.opsForValue().increment(countKey);
         // Add IP to the global set of known IPs (for reporting)
         redis.opsForSet().add(IP_SET_KEY, ip);
+        } catch (Exception e) {
+            log.error("Redis unavailable — bot tracking skipped for {}: {}", ip, e.getMessage());
+        }
     }
 
     /**
      * Checks if an IP has exceeded the minimum suspicious threshold.
      */
     public boolean isSuspicious(String ip) {
+        try{ 
         return getCount(ip) > LOW_RISK_THRESHOLD;
+        } catch (Exception e) {
+            log.error("Redis unavailable — isSuspicious check skipped for {}: {}", ip, e.getMessage());
+            return false; // Default to not suspicious on error
+        }
     }
 
     // returns risk level of IP based on how many requests it has made (low = 50,
@@ -132,8 +144,13 @@ public class BotDetector {
 
     // method to fetch and parse the count from Redis.
     private int getCount(String ip) {
+        try{   
         String val = redis.opsForValue().get(COUNT_PREFIX + ip);
         return val == null ? 0 : Integer.parseInt(val);
+        } catch (Exception e) {
+            log.error("Redis unavailable — getCount returning 0 for {}: {}", ip, e.getMessage());
+            return 0; // Default to 0 on error
+        }
     }
 
     // clears all bot-related data from redis to reset state between test cases
