@@ -101,6 +101,10 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         if (!rateLimiter.isRequestAllowed(apiKey.toLowerCase(), tenantId, appId)) {
             log.warn("BLOCKED reason=rate_limit_exceeded key={} tenant={} app={} path={}",
                     apiKey, tenantId, appId, path);
+            response.setHeader("X-RateLimit-Limit",
+                    String.valueOf(rateLimiter.getResolvedLimit(apiKey.toLowerCase(), tenantId, appId)));
+            response.setHeader("X-RateLimit-Algorithm",
+                    rateLimiter.getResolvedAlgorithm(apiKey.toLowerCase(), tenantId, appId));
             sendError(response, request, 429,
                     "Too Many Requests", "Request could not be processed at this time.");
             return;
@@ -108,6 +112,10 @@ public class ApiKeyFilter extends OncePerRequestFilter {
 
         // Key is valid — pass the request to the next filter in the chain.
         log.info("ALLOWED key={} tenant={} app={} path={}", apiKey, tenantId, appId, path);
+        response.setHeader("X-RateLimit-Limit",
+                String.valueOf(rateLimiter.getResolvedLimit(apiKey.toLowerCase(), tenantId, appId)));
+        response.setHeader("X-RateLimit-Algorithm",
+                rateLimiter.getResolvedAlgorithm(apiKey.toLowerCase(), tenantId, appId));
         filterChain.doFilter(request, response);
     }
 
@@ -119,8 +127,8 @@ public class ApiKeyFilter extends OncePerRequestFilter {
         response.setStatus(status);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        // For 429 Too Many Requests, include a Retry-After header 
-        // to indicate when the client can try again.        
+        // For 429 Too Many Requests, include a Retry-After header
+        // to indicate when the client can try again.
         if (status == 429) {
             response.setHeader("Retry-After", "10");
         }

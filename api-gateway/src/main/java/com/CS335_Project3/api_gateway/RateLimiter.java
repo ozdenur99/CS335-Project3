@@ -238,6 +238,21 @@ public class RateLimiter {
     public int getClientLimit(String clientId) {
         return clientLimits.getOrDefault(clientId, tenantRateLimitConfig.getDefaultLimit());
     }
+    // added method to resolve limit hierarchically: App > Tenant > Client > Global.
+    public int getResolvedLimit(String clientId, String tenantId, String appId) {
+        TenantRateLimitConfig cfg = this.tenantRateLimitConfig;
+        TenantRateLimitConfig.TenantPolicy tenantPolicy = (cfg != null && tenantId != null)
+                ? cfg.getTenants().get(tenantId)
+                : null;
+        TenantRateLimitConfig.AppPolicy appPolicy = (tenantPolicy != null && appId != null)
+                ? tenantPolicy.getApps().get(appId)
+                : null;
+        if (appPolicy != null && appPolicy.isEnabled())
+            return appPolicy.getLimit();
+        if (tenantPolicy != null && tenantPolicy.isEnabled())
+            return tenantPolicy.getLimit();
+        return clientLimits.getOrDefault(clientId, (cfg != null) ? cfg.getDefaultLimit() : 5);
+    }
 
     /**
      * New overloaded method for hierarchical scoping.
