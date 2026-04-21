@@ -30,6 +30,7 @@ public class MetricsService {
 
     // ConcurrentHashMap is a thread-safe map that tracks request count per API key
     private final ConcurrentHashMap<String, AtomicInteger> perKeyCount = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AtomicInteger> perKeyBlockedCount = new ConcurrentHashMap<>();
 
     // stores latency values per API key so we can calculate percentiles later
     // key = apiKey, value = list of latency values in milliseconds
@@ -57,6 +58,8 @@ public class MetricsService {
         totalRequests.incrementAndGet();
         if (wasBlocked) {
             blockedRequests.incrementAndGet();
+            perKeyBlockedCount.computeIfAbsent(apiKey, k -> new AtomicInteger(0))
+                    .incrementAndGet();
         }
         // add key to map if new then increment its count
         perKeyCount.computeIfAbsent(apiKey, k -> new AtomicInteger(0))
@@ -81,6 +84,7 @@ public class MetricsService {
         // store status code count for this client
         perKeyStatusCodes
                 .computeIfAbsent(apiKey, k -> new ConcurrentHashMap<>())
+                // add per-key status code counting
                 .computeIfAbsent(statusCode, k -> new AtomicInteger(0))
                 .incrementAndGet();
     }
@@ -166,4 +170,9 @@ public class MetricsService {
     public void resetWindowCounts() {
         perKeyRequestsInWindow.clear();
     }
+
+    public ConcurrentHashMap<String, AtomicInteger> getPerKeyBlockedCount() {
+        return perKeyBlockedCount;
+    }
+
 }

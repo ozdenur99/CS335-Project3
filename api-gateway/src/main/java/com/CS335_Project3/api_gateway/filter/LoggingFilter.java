@@ -70,7 +70,7 @@ public class LoggingFilter extends OncePerRequestFilter {
         // skip logging for internal/static paths so they dont show up in metrics
         if (EXCLUDED_PATHS.contains(request.getRequestURI()) || request.getRequestURI().startsWith("/admin")) {
             chain.doFilter(request, response);
-            return; 
+            return;
         }
 
         // record the start time so we can calculate how long the request took
@@ -95,7 +95,9 @@ public class LoggingFilter extends OncePerRequestFilter {
         }
 
         // get the client IP and which rate limiting algorithm they are assigned to
-        String ip = request.getRemoteAddr();
+        String forwarded = request.getHeader("X-Forwarded-For");
+        String ip = (forwarded != null && !forwarded.isBlank()) ? forwarded.split(",")[0].trim()
+                : request.getRemoteAddr();
         String rawTenant = request.getHeader("X-Tenant-Id");
         String rawApp = request.getHeader("X-App-Id");
         String tenantId = (rawTenant == null || rawTenant.isBlank()) ? null : rawTenant.toLowerCase();

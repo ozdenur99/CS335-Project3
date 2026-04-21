@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
+import java.util.concurrent.atomic.AtomicInteger;
 
 //@RestController marks this as a REST endpoint (responses are automatically converted to JSON)
 //@RequestMapping sets the base URL for all endpoints in this class to /metrics
@@ -24,15 +25,14 @@ import org.springframework.web.client.RestTemplate;
 @RequestMapping("/metrics")
 public class MetricsController {
 
-    // we inject MetricsService, RequestLogger and BotDetector so we can read their
-    // data
+    // we inject MetricsService, RequestLogger and BotDetector so we can read their data
     private final MetricsService metricsService;
     private final RequestLogger requestLogger;
     private final BotDetector botDetector;
-    // makes HTTP calls to the backend service to get timeseries data
+    // makes HTTP calls to the backend service to get timeseries data 
     private final RestTemplate restTemplate;
     @Value("${backend.url}")
-    private String backendUrl;
+    private String backendUrl; 
 
     public MetricsController(MetricsService metricsService, RequestLogger requestLogger,
             BotDetector botDetector, RestTemplate restTemplate) {
@@ -166,6 +166,7 @@ public class MetricsController {
         metricsService.getPerKeyCount().forEach((apiKey, count) -> {
             Map<String, Object> clientData = new HashMap<>();
             clientData.put("totalRequests", count.get());
+            clientData.put("blockedCount", metricsService.getPerKeyBlockedCount().getOrDefault(apiKey, new AtomicInteger(0)).get());
             clientData.put("latency", metricsService.getLatencyPercentiles(apiKey));
             clientData.put("statusCodes", metricsService.getStatusCodes(apiKey));
             clientData.put("riskScore", metricsService.getRiskScore(apiKey) + "%");
