@@ -15,6 +15,9 @@ public class NotesController {
 
     @PostMapping
     public Note createNote(@PathVariable String guid, @RequestBody Note note) {
+        if (note.getId() == null) {
+            note.setId(java.util.UUID.randomUUID().toString()); 
+        }
         notesStorage.computeIfAbsent(guid, k -> new ArrayList<>()).add(note);
         return note;
     }

@@ -105,7 +105,7 @@ public class LogController {
                     try {
                         // each entry comes back as a JSON string, so we deserialize it back to a Map. 
                         // if parsing fails, we return null and filter it out later.
-                        return objectMapper.readValue(s, Map.class);
+                        return (Map<String, Object>) objectMapper.readValue(s, Map.class);
                     } catch (Exception e) {
                         return null;
                     }
