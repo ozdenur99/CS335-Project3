@@ -68,9 +68,9 @@ public class LoggingFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         // skip logging for internal/static paths so they dont show up in metrics
-        if (EXCLUDED_PATHS.contains(request.getRequestURI())) {
+        if (EXCLUDED_PATHS.contains(request.getRequestURI()) || request.getRequestURI().startsWith("/admin")) {
             chain.doFilter(request, response);
-            return;
+            return; 
         }
 
         // record the start time so we can calculate how long the request took
