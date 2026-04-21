@@ -36,7 +36,8 @@ public class LoggingFilter extends OncePerRequestFilter {
             // otherwise every time team metrics check gets logged and counted
             "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
-            "/metrics/latency", "/metrics/risk", "/metrics/timeseries", "/metrics/clients", "/metrics/gateway");
+            "/metrics/latency", "/metrics/risk", "/metrics/timeseries", "/metrics/clients", "/metrics/gateway",
+            "/metrics/status");
 
     // gateway-1 is just the fallback default used when running locally
     // without Docker (where GATEWAY_ID env var isn't set).
@@ -114,7 +115,7 @@ public class LoggingFilter extends OncePerRequestFilter {
             LogEntry flaggedEntry = new LogEntry(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs,
                     gatewayId, requestId);
             requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs, gatewayId, requestId);
-            metricsService.recordRequest(apiKey, true, latencyMs, 0, gatewayId);
+            metricsService.recordRequest(apiKey, true, latencyMs, 403, gatewayId);
             logForwarder.forward(flaggedEntry);
             wrappedResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
             wrappedResponse.setContentType("application/json");

@@ -25,14 +25,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RequestMapping("/metrics")
 public class MetricsController {
 
-    // we inject MetricsService, RequestLogger and BotDetector so we can read their data
+    // we inject MetricsService, RequestLogger and BotDetector so we can read their
+    // data
     private final MetricsService metricsService;
     private final RequestLogger requestLogger;
     private final BotDetector botDetector;
-    // makes HTTP calls to the backend service to get timeseries data 
+    // makes HTTP calls to the backend service to get timeseries data
     private final RestTemplate restTemplate;
     @Value("${backend.url}")
-    private String backendUrl; 
+    private String backendUrl;
 
     public MetricsController(MetricsService metricsService, RequestLogger requestLogger,
             BotDetector botDetector, RestTemplate restTemplate) {
@@ -145,6 +146,18 @@ public class MetricsController {
         return result;
     }
 
+    // GET /metrics/status (returns status code breakdown for all tracked clients and the gateway overall)
+    @GetMapping("/status")
+    public Map<String, Object> getStatusCodeBreakdown() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("gateway", metricsService.getStatusCodeTotals());
+        Map<String, Map<Integer, Integer>> perKey = new HashMap<>();
+        metricsService.getPerKeyCount()
+                .forEach((apiKey, count) -> perKey.put(apiKey, metricsService.getStatusCodes(apiKey)));
+        result.put("perKey", perKey);
+        return result;
+    }
+
     @GetMapping("/timeseries")
     public ResponseEntity<?> getTimeseries(
             @RequestParam(defaultValue = "week") String range,
@@ -166,7 +179,8 @@ public class MetricsController {
         metricsService.getPerKeyCount().forEach((apiKey, count) -> {
             Map<String, Object> clientData = new HashMap<>();
             clientData.put("totalRequests", count.get());
-            clientData.put("blockedCount", metricsService.getPerKeyBlockedCount().getOrDefault(apiKey, new AtomicInteger(0)).get());
+            clientData.put("blockedCount",
+                    metricsService.getPerKeyBlockedCount().getOrDefault(apiKey, new AtomicInteger(0)).get());
             clientData.put("latency", metricsService.getLatencyPercentiles(apiKey));
             clientData.put("statusCodes", metricsService.getStatusCodes(apiKey));
             clientData.put("riskScore", metricsService.getRiskScore(apiKey) + "%");

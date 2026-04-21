@@ -37,7 +37,9 @@ public class AbuseFilter extends OncePerRequestFilter {
             "/metrics/logs/filter",
             "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
-            "/metrics/latency", "/metrics/risk", "/metrics/timeseries", "/metrics/clients", "/metrics/gateway");
+            "/metrics/latency", "/metrics/risk", "/metrics/timeseries", "/metrics/clients", "/metrics/gateway",
+            "/metrics/status",
+            "/favicon.ico");
 
     // private final Spike spike;
     private final Failure failure;

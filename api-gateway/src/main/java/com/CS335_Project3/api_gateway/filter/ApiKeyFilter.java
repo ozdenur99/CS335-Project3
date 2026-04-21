@@ -36,7 +36,7 @@ public class ApiKeyFilter extends OncePerRequestFilter {
             "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
             "/metrics/latency", "/metrics/risk", "/favicon.ico",
-            "/metrics/timeseries", "/metrics/clients", "/metrics/gateway");
+            "/metrics/timeseries", "/metrics/clients", "/metrics/gateway","/metrics/status");
 
     private static final String ADMIN_KEY_HEADER = "X-Admin-Key";
     private final ApiKeyConfig apiKeyConfig;

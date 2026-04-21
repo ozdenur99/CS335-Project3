@@ -45,6 +45,8 @@ public class MetricsService {
     // used to calculate risk score
     private final ConcurrentHashMap<String, AtomicInteger> perKeyRequestsInWindow = new ConcurrentHashMap<>();
 
+    // gateway-level status code totals (across all keys)
+    private final ConcurrentHashMap<Integer, AtomicInteger> statusCodeTotals = new ConcurrentHashMap<>();
     // the rate limit per client (used to calculate risk %)
     // matches the limits set in RateLimiter.java
 
@@ -87,6 +89,10 @@ public class MetricsService {
                 // add per-key status code counting
                 .computeIfAbsent(statusCode, k -> new AtomicInteger(0))
                 .incrementAndGet();
+        // also update gateway-level status code totals
+        if (statusCode > 0) {
+            statusCodeTotals.computeIfAbsent(statusCode, k -> new AtomicInteger(0)).incrementAndGet();
+        }
     }
 
     // calculates latency percentiles for a given client
@@ -157,6 +163,7 @@ public class MetricsService {
         Map<String, Integer> riskScores = new HashMap<>();
         perKeyCount.forEach((key, count) -> riskScores.put(key, getRiskScore(key)));
         snapshot.put("riskScores", riskScores);
+        snapshot.put("statusCodes", getStatusCodeTotals());
 
         return snapshot;
     }
@@ -175,4 +182,10 @@ public class MetricsService {
         return perKeyBlockedCount;
     }
 
+    // returns the gateway-level status code totals (used by MetricsExporter)
+    public Map<Integer, Integer> getStatusCodeTotals() {
+        Map<Integer, Integer> result = new HashMap<>();
+        statusCodeTotals.forEach((code, count) -> result.put(code, count.get()));
+        return result;
+    }
 }
