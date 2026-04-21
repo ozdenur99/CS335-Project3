@@ -16,9 +16,10 @@ public class LogEntry {
     private final String algorithm; // the rate limiting algorithm used for the request
     private final long latencyMs; // how long the request took in milliseconds
     private final String gatewayId; // which gateway handled the request
+    private final String requestId; // unique ID for tracing this request
 
     public LogEntry(String apiKey, String ip, String path, String decision,
-            String reason, String algorithm, long latencyMs, String gatewayId) {
+            String reason, String algorithm, long latencyMs, String gatewayId, String requestId) {
         this.timestamp = Instant.now();
         this.apiKey = apiKey;
         this.ip = ip;
@@ -28,6 +29,7 @@ public class LogEntry {
         this.algorithm = algorithm;
         this.latencyMs = latencyMs;
         this.gatewayId = gatewayId;
+        this.requestId = requestId;
     }
 
     // Spring needs these parameters to convert the objects to JSON
@@ -65,5 +67,9 @@ public class LogEntry {
 
     public String getGatewayId() {
         return gatewayId;
+    }
+
+    public String getRequestId() {
+        return requestId;
     }
 }

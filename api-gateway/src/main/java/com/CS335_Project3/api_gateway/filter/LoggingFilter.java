@@ -18,6 +18,7 @@ import org.springframework.web.util.ContentCachingResponseWrapper;
 import java.io.IOException;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
+import java.util.UUID;
 
 //@Component makes Spring create one single instance shared across the whole app
 //@Order(1) ensures LoggingFilter runs first and wraps the entire chain
@@ -35,10 +36,10 @@ public class LoggingFilter extends OncePerRequestFilter {
             // otherwise every time team metrics check gets logged and counted
             "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
-            "/metrics/latency", "/metrics/risk","/metrics/timeseries","/metrics/clients");
+            "/metrics/latency", "/metrics/risk", "/metrics/timeseries", "/metrics/clients");
 
-            // gateway-1 is just the fallback default used when running locally 
-            // without Docker (where GATEWAY_ID env var isn't set).
+    // gateway-1 is just the fallback default used when running locally
+    // without Docker (where GATEWAY_ID env var isn't set).
     @Value("${GATEWAY_ID:gateway-1}")
     private String gatewayId;
 
@@ -79,6 +80,11 @@ public class LoggingFilter extends OncePerRequestFilter {
         // without this Spring sometimes commits the response before we can read it
         ContentCachingResponseWrapper wrappedResponse = new ContentCachingResponseWrapper(response);
 
+        // generate a unique request ID for tracing this request across all logs and
+        // metrics
+        String requestId = UUID.randomUUID().toString();
+        wrappedResponse.setHeader("X-Request-ID", requestId);
+
         // grab all the request info we need before passing it on
         String apiKey = request.getHeader("X-API-Key");
         String path = request.getRequestURI();
@@ -103,11 +109,12 @@ public class LoggingFilter extends OncePerRequestFilter {
         botDetector.record(ip);
         if (botDetector.isSuspicious(ip)) {
             long latencyMs = System.currentTimeMillis() - startTime;
-            LogEntry flaggedEntry = new LogEntry(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs, gatewayId);
-            requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs, gatewayId);
+            LogEntry flaggedEntry = new LogEntry(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs,
+                    gatewayId, requestId);
+            requestLogger.log(apiKey, ip, path, "FLAGGED", "suspected_bot", algorithm, latencyMs, gatewayId, requestId);
             metricsService.recordRequest(apiKey, true, latencyMs, 0, gatewayId);
             logForwarder.forward(flaggedEntry);
-            wrappedResponse.setStatus(HttpServletResponse.SC_FORBIDDEN); 
+            wrappedResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
             wrappedResponse.setContentType("application/json");
             wrappedResponse.setCharacterEncoding("UTF-8");
             wrappedResponse.getWriter().write(String.format(
@@ -153,13 +160,14 @@ public class LoggingFilter extends OncePerRequestFilter {
         boolean wasBlocked = decision.equals("BLOCKED");
 
         // record the full request details in the log and update the metrics counters
-        requestLogger.log(apiKey, ip, path, decision, reason, algorithm, latencyMs, gatewayId);
+        requestLogger.log(apiKey, ip, path, decision, reason, algorithm, latencyMs, gatewayId, requestId);
         // pass latency and status code to MetricsService so it can track percentiles
         // and status breakdowns
         metricsService.recordRequest(apiKey, wasBlocked, latencyMs, status, gatewayId);
 
         // forward the log entry to the backend in real time
-        logForwarder.forward(new LogEntry(apiKey, ip, path, decision, reason, algorithm, latencyMs, gatewayId));
+        logForwarder
+                .forward(new LogEntry(apiKey, ip, path, decision, reason, algorithm, latencyMs, gatewayId, requestId));
 
         // copy the response body back so the client still receives it
         wrappedResponse.copyBodyToResponse();
