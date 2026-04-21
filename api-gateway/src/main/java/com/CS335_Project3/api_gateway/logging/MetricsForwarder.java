@@ -8,12 +8,15 @@ import java.time.Instant;
 import java.util.Map;
 import org.springframework.scheduling.annotation.Scheduled;
 import com.CS335_Project3.api_gateway.metrics.MetricsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class MetricsForwarder {
 
     private final MetricsService metricsService;
     private final RestTemplate restTemplate;
+    private static final Logger log = LoggerFactory.getLogger(MetricsForwarder.class);
 
     @Value("${backend.url:http://localhost:8081/api/}")
     private String backendUrl;
@@ -26,15 +29,15 @@ public class MetricsForwarder {
         this.restTemplate = restTemplate;
     }
 
-    @Scheduled(fixedRate = 60000)
+    @Scheduled(fixedRate = 10000)
     public void forwardMetrics() {
         try {
             Map<String, Object> snapshot = metricsService.getSnapshot();
             snapshot.put("gatewayId", gatewayId);
             snapshot.put("timestamp", Instant.now().toEpochMilli());
-            restTemplate.postForObject(backendUrl + "metrics", snapshot, String.class);
+            restTemplate.postForObject(backendUrl + "logs/metrics", snapshot, String.class);
         } catch (Exception e) {
-            // fail silently, same as LogForwarder
+            log.error("MetricsForwarder failed: {}", e.getMessage());
         }
     }
 }

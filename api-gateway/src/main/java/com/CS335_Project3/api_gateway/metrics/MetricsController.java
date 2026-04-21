@@ -174,4 +174,13 @@ public class MetricsController {
         return result;
     }
 
+    // GET /metrics/gateway
+    // returns per-gateway breakdown: requests, blocked, latency, risk scores
+    // each gateway forwards its snapshot to backend every 60s via MetricsForwarder
+    @GetMapping("/gateway")
+    public ResponseEntity<?> getGatewayMetrics() {
+        String url = backendUrl + "logs/metrics/latest";
+        return ResponseEntity.ok(restTemplate.getForObject(url, Map.class));
+    }
+
 }
