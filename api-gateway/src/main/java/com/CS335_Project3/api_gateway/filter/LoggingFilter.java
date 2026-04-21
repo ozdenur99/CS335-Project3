@@ -35,7 +35,7 @@ public class LoggingFilter extends OncePerRequestFilter {
             // otherwise every time team metrics check gets logged and counted
             "/metrics/logs/filter", "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
-            "/metrics/latency", "/metrics/risk");
+            "/metrics/latency", "/metrics/risk","/metrics/timeseries","/metrics/clients");
 
             // gateway-1 is just the fallback default used when running locally 
             // without Docker (where GATEWAY_ID env var isn't set).

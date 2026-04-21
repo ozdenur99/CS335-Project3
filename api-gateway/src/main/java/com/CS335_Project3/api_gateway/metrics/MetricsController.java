@@ -152,8 +152,26 @@ public class MetricsController {
             @RequestParam(required = false) Long from,
             @RequestParam(required = false) Long to) {
         String url = backendUrl + "logs/metrics/timeseries?range=" + range
-        + (from != null ? "&from=" + from : "")
-        + (to != null ? "&to=" + to : "");
+                + (from != null ? "&from=" + from : "")
+                + (to != null ? "&to=" + to : "");
         return ResponseEntity.ok(restTemplate.getForObject(url, List.class));
     }
+
+    // GET /metrics/clients
+    // returns a per-client summary: requests, blocked, latency percentiles, status
+    // codes, risk score
+    @GetMapping("/clients")
+    public Map<String, Object> getClientMetrics() {
+        Map<String, Object> result = new HashMap<>();
+        metricsService.getPerKeyCount().forEach((apiKey, count) -> {
+            Map<String, Object> clientData = new HashMap<>();
+            clientData.put("totalRequests", count.get());
+            clientData.put("latency", metricsService.getLatencyPercentiles(apiKey));
+            clientData.put("statusCodes", metricsService.getStatusCodes(apiKey));
+            clientData.put("riskScore", metricsService.getRiskScore(apiKey) + "%");
+            result.put(apiKey, clientData);
+        });
+        return result;
+    }
+
 }
