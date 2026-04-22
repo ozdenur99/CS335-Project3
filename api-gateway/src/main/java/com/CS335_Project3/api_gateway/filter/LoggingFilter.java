@@ -121,10 +121,10 @@ public class LoggingFilter extends OncePerRequestFilter {
             wrappedResponse.setContentType("application/json");
             wrappedResponse.setCharacterEncoding("UTF-8");
             wrappedResponse.getWriter().write(String.format(
-                    "{\"status\":403,\"error\":\"Forbidden\",\"message\":\"Suspicious bot activity detected.\",\"path\":\"%s\"}",
-                    path));
+                    "{\"status\":403,\"error\":\"Forbidden\",\"message\":\"Suspicious bot activity detected.\",\"path\":\"%s\",\"requestId\":\"%s\"}",
+                    path, requestId));
             wrappedResponse.copyBodyToResponse();
-            return;
+            return;  
         }
 
         // passes the wrapped response through the rest of the filter chain

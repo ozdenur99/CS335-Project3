@@ -147,8 +147,11 @@ public class AbuseFilter extends OncePerRequestFilter {
         response.setStatus(status);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
+        // Include request ID for better traceability in logs
+        String requestId = response.getHeader("X-Request-ID");
         response.getWriter().write(String.format(
-                "{\"status\":%d,\"error\":\"%s\",\"message\":\"%s\",\"path\":\"%s\"}",
-                status, error, message, request.getRequestURI()));
+                "{\"status\":%d,\"error\":\"%s\",\"message\":\"%s\",\"path\":\"%s\",\"requestId\":\"%s\"}",
+                status, error, message, request.getRequestURI(),
+                requestId != null ? requestId : ""));
     }
 }
