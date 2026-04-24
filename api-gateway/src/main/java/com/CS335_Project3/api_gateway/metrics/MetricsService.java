@@ -31,6 +31,7 @@ public class MetricsService {
 
     // ConcurrentHashMap is a thread-safe map that tracks request count per API key
     private final ConcurrentHashMap<String, AtomicInteger> perKeyCount = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AtomicInteger> perKeyBlockedCount = new ConcurrentHashMap<>();
 
     // stores latency values per API key so we can calculate percentiles later
     // key = apiKey, value = list of latency values in milliseconds
@@ -45,6 +46,8 @@ public class MetricsService {
     // used to calculate risk score
     private final ConcurrentHashMap<String, AtomicInteger> perKeyRequestsInWindow = new ConcurrentHashMap<>();
 
+    // gateway-level status code totals (across all keys)
+    private final ConcurrentHashMap<Integer, AtomicInteger> statusCodeTotals = new ConcurrentHashMap<>();
     // the rate limit per client (used to calculate risk %)
     // matches the limits set in RateLimiter.java
 
@@ -58,6 +61,8 @@ public class MetricsService {
         totalRequests.incrementAndGet();
         if (wasBlocked) {
             blockedRequests.incrementAndGet();
+            perKeyBlockedCount.computeIfAbsent(apiKey, k -> new AtomicInteger(0))
+                    .incrementAndGet();
         }
         // add key to map if new then increment its count
         perKeyCount.computeIfAbsent(apiKey, k -> new AtomicInteger(0))
@@ -82,8 +87,13 @@ public class MetricsService {
         // store status code count for this client
         perKeyStatusCodes
                 .computeIfAbsent(apiKey, k -> new ConcurrentHashMap<>())
+                // add per-key status code counting
                 .computeIfAbsent(statusCode, k -> new AtomicInteger(0))
                 .incrementAndGet();
+        // also update gateway-level status code totals
+        if (statusCode > 0) {
+            statusCodeTotals.computeIfAbsent(statusCode, k -> new AtomicInteger(0)).incrementAndGet();
+        }
     }
 
     // calculates latency percentiles for a given client
@@ -154,6 +164,7 @@ public class MetricsService {
         Map<String, Integer> riskScores = new HashMap<>();
         perKeyCount.forEach((key, count) -> riskScores.put(key, getRiskScore(key)));
         snapshot.put("riskScores", riskScores);
+        snapshot.put("statusCodes", getStatusCodeTotals());
 
         return snapshot;
     }
@@ -167,5 +178,16 @@ public class MetricsService {
     @Scheduled(fixedRate = 60000)
     public void resetWindowCounts() {
         perKeyRequestsInWindow.clear();
+    }
+
+    public ConcurrentHashMap<String, AtomicInteger> getPerKeyBlockedCount() {
+        return perKeyBlockedCount;
+    }
+
+    // returns the gateway-level status code totals (used by MetricsExporter)
+    public Map<Integer, Integer> getStatusCodeTotals() {
+        Map<Integer, Integer> result = new HashMap<>();
+        statusCodeTotals.forEach((code, count) -> result.put(code, count.get()));
+        return result;
     }
 }

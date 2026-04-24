@@ -1,10 +1,17 @@
 package com.CS335_Project3.api_gateway.controller;
 
 import com.CS335_Project3.api_gateway.RateLimiter;
+import com.CS335_Project3.api_gateway.config.AuditEntry;
 import com.CS335_Project3.api_gateway.config.TenantRateLimitConfig;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.bind.annotation.*;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -39,11 +46,25 @@ public class ConfigController {
     // ensuring "Gateway-2" behaves exactly like "Gateway-1."
     private final StringRedisTemplate redis;
 
+    // Jackson ObjectMapper serializes AuditEntry → JSON string for Redis storage
+    // and deserializes JSON string → AuditEntry when reading back
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // Redis List key — all gateways push to and read from the same list
+    // so audit log is shared and survives restarts
+    private static final String AUDIT_KEY = "config:audit";
+
+    // max entries to keep in Redis — older entries are trimmed automatically
+    private static final long AUDIT_MAX_SIZE = 100;
+
     /**
      * Constructor injection — Spring sees this constructor and automatically
      * provides the three beans. No @Autowired needed when there's only one
      * constructor.
      */
+    @Value("${GATEWAY_ID:gateway-1}")
+    private String gatewayId;
+
     public ConfigController(TenantRateLimitConfig tenantRateLimitConfig,
             RateLimiter rateLimiter,
             StringRedisTemplate redis) {
@@ -105,7 +126,6 @@ public class ConfigController {
 
         // 3. Look up the Tenant in the in-memory config.
         TenantRateLimitConfig.TenantPolicy tenantPolicy = tenantRateLimitConfig.getTenants().get(tenant);
-
         if (tenantPolicy == null) {
             return Map.of("status", "error", "message", "tenant not found: " + tenant);
         }
@@ -116,6 +136,11 @@ public class ConfigController {
             if (appPolicy == null) {
                 return Map.of("status", "error", "message", "app not found: " + app);
             }
+
+            // Capture old values BEFORE changing anything
+            // This is what shows up in the audit log as "what it was before"
+            String oldAlgorithm = appPolicy.getAlgorithm();
+            int oldLimit = appPolicy.getLimit();
 
             // Modify the in-memory object directly.
             // Only set fields that were actually provided in the request (null check).
@@ -130,8 +155,14 @@ public class ConfigController {
                 redis.opsForHash().put(appHashKey, "algorithm", algorithm);
             if (limit != null)
                 redis.opsForHash().put(appHashKey, "limit", limit.toString());
+            // Write audit entry to Redis after the change succeeds
+            writeAudit(tenant, app, oldAlgorithm, algorithm, oldLimit, limit);
 
         } else {
+            // Tenant-level change
+            String oldAlgorithm = tenantPolicy.getAlgorithm();
+            int oldLimit = tenantPolicy.getLimit();
+
             // Tenant-level change
             if (algorithm != null)
                 tenantPolicy.setAlgorithm(algorithm);
@@ -145,12 +176,72 @@ public class ConfigController {
                 redis.opsForHash().put(tenantHashKey, "algorithm", algorithm);
             if (limit != null)
                 redis.opsForHash().put(tenantHashKey, "limit", limit.toString());
+            writeAudit(tenant, null, oldAlgorithm, algorithm, oldLimit, limit);
         }
 
         // Reload so this gateway's RateLimiter sees the update immediately
-        // Notify ALL gateways via Pub/Sub — each listener calls reloadConfig() instantly
+        // Notify ALL gateways via Pub/Sub — each listener calls reloadConfig()
+        // instantly
         redis.convertAndSend("config-reload", "update");
 
         return Map.of("status", "ok", "message", "config updated");
+    }
+
+    /**
+     * GET /admin/config/audit
+     * Returns the last 100 config changes across all gateways, newest first.
+     * Reads from Redis so it persists across restarts and includes changes
+     * made by gateway-2 as well.
+     */
+    @GetMapping("/audit")
+    public List<AuditEntry> getAuditLog() {
+        List<String> raw = redis.opsForList().range(AUDIT_KEY, 0, AUDIT_MAX_SIZE - 1);
+        List<AuditEntry> entries = new ArrayList<>();
+        if (raw == null)
+            return entries;
+
+        for (String json : raw) {
+            try {
+                entries.add(objectMapper.readValue(json, AuditEntry.class));
+            } catch (Exception e) {
+                // skip corrupted entries rather than failing the whole response
+            }
+        }
+        return entries;
+    }
+
+    /**
+     * Serializes an AuditEntry to JSON and pushes it to the Redis List.
+     * LPUSH puts newest entries at index 0 (front of list).
+     * LTRIM keeps the list capped at AUDIT_MAX_SIZE so Redis doesn't grow forever.
+     *
+     * newAlgorithm and newLimit are null when only one field was changed —
+     * the audit entry only records what actually changed.
+     */
+    private void writeAudit(String tenant, String app,
+            String oldAlgorithm, String newAlgorithm,
+            int oldLimit, Integer newLimit) {
+        try {
+            AuditEntry entry = new AuditEntry(
+                    Instant.now().toString(),
+                    tenant,
+                    app,
+                    oldAlgorithm,
+                    newAlgorithm, // null if only limit changed
+                    oldLimit,
+                    newLimit, // null if only algorithm changed
+                    gatewayId);
+            String json = objectMapper.writeValueAsString(entry);
+
+            // LPUSH = Left Push — newest entry goes to the front (index 0)
+            redis.opsForList().leftPush(AUDIT_KEY, json);
+
+            // LTRIM keeps only the 100 most recent entries
+            // index 0 = newest, index 99 = oldest kept
+            redis.opsForList().trim(AUDIT_KEY, 0, AUDIT_MAX_SIZE - 1);
+
+        } catch (Exception e) {
+            // audit failure must never break the actual config update
+        }
     }
 }
