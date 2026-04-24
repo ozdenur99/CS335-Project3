@@ -13,7 +13,7 @@ spring.data.redis.port=${REDIS_PORT:6379}
 
 # Gateway Route Configuration
 # All valid API keys — copy this list to application.properties and replace with real values
-gateway.api-keys=dev-key-token,dev-key-fixed,dev-key-sliding,dev-key-leaky,dev-key-business,key-acme-dashboard,key-acme-api,key-beta-dashboard,key-beta-api,key-enterprise-dashboard,key-enterprise-api
+gateway.api-keys=dev-key-token,dev-key-fixed,dev-key-sliding,dev-key-leaky,dev-key-business,key-acme-dashboard,key-acme-api,key-beta-dashboard,key-beta-api,key-enterprise-dashboard,key-enterprise-api,dev-key-dynamic
 
 # Abuse protection — IP ban after N failures in a window
 abuse.failure.maxFailuresPerWindow=5
@@ -29,6 +29,7 @@ rate-limit.clients.dev-key-fixed.limit=3
 rate-limit.clients.dev-key-sliding.limit=3
 rate-limit.clients.dev-key-leaky.limit=3
 rate-limit.clients.dev-key-business.limit=6
+rate-limit.clients.dev-key-dynamic.limit=10
 
 # Token bucket refill behaviour
 rate-limit.token.refill-tokens=5

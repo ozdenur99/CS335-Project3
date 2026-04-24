@@ -18,6 +18,7 @@ services:
       # redis matches the service name already defined in docker-compose
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - SERVER_FORWARD_HEADERS_STRATEGY=framework
     depends_on:
       backend:
         condition: service_started
@@ -38,6 +39,7 @@ services:
       - BACKEND_URL=http://backend:8081/api/
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - SERVER_FORWARD_HEADERS_STRATEGY=framework
     depends_on:
       backend:
         condition: service_started
@@ -60,9 +62,42 @@ services:
       retries: 5
     networks:
       - cs335-net
+
+  #dashboard
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      # This automatically installs the Infinity plugin when the container starts
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
+    depends_on:
+      - gateway1 # Wait for gateway to run
+      - gateway2
+    networks:
+      - cs335-net # Puts Grafana on the same network as API and Redis
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    
+    #locust testing
+  locust:
+    image: locustio/locust
+    container_name: locust
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./locustfile.py:/mnt/locust/locustfile.py
+    command: -f /mnt/locust/locustfile.py
+    networks:
+      - cs335-net
+    
+
 volumes:
   redis-data:
+  grafana-storage:
 
 networks:
   cs335-net:
     driver: bridge
+

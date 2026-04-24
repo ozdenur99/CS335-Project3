@@ -137,11 +137,11 @@ public class RateLimiter {
 
         // limit lowered from 5 to 3 for testing purposes
         // to trigger 429 without sending too many requests for logging
-        clientLimits.put("dev-key-token", 3);
-        clientLimits.put("dev-key-fixed", 3);
-        clientLimits.put("dev-key-sliding", 3);
-        clientLimits.put("dev-key-leaky", 3);
-        clientLimits.put("dev-key-dynamic", 10);
+        clientLimits.put("dev-key-token", 50);
+        clientLimits.put("dev-key-fixed", 50);
+        clientLimits.put("dev-key-sliding", 50);
+        clientLimits.put("dev-key-leaky", 50);
+        clientLimits.put("dev-key-dynamic", 100);
 
         // Business client
         clientAlgorithms.put("dev-key-business", "token");
@@ -149,7 +149,7 @@ public class RateLimiter {
         // limit also lowered from 10 to 6 for testing purposes
 
         // to trigger 429 without sending too many requests for logging
-        clientLimits.put("dev-key-business", 6);
+        clientLimits.put("dev-key-business", 40);
         // Tenant/App scoped keys — algorithm and limit are fallback only
         // Real policy comes from tenant/app config (application.properties or
         // ConfigController)
