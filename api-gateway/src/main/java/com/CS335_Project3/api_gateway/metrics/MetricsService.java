@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.CS335_Project3.api_gateway.RateLimiter;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Scheduled;
 
 //@Component makes Spring create one single instance shared across the whole app
 @Component
@@ -174,6 +175,7 @@ public class MetricsService {
     }
 
     // resets the per-window request counts (call this when windows reset)
+    @Scheduled(fixedRate = 60000)
     public void resetWindowCounts() {
         perKeyRequestsInWindow.clear();
     }

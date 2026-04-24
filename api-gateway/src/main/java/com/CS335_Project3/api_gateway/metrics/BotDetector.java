@@ -32,11 +32,10 @@ public class BotDetector {
     // private static final int SUSPICIOUS_THRESHOLD = 50;
 
     // risk levels for suspicious IPs
-    private static final int LOW_RISK_THRESHOLD = 50;
-    private static final int MEDIUM_RISK_THRESHOLD = 100;
-    private static final int HIGH_RISK_THRESHOLD = 200;
-    // Logger for debugging and monitoring
-    private static final Logger log = LoggerFactory.getLogger(BotDetector.class);
+    private static final int LOW_RISK_THRESHOLD = 50000;
+    private static final int MEDIUM_RISK_THRESHOLD = 100000;
+    private static final int HIGH_RISK_THRESHOLD = 200000;
+
     // Redis Key Constants
     private static final String COUNT_PREFIX = "bot:count:";
     private static final String IP_SET_KEY = "bot:all_ips";
