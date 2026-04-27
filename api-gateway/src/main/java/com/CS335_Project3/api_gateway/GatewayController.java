@@ -47,6 +47,7 @@ public class GatewayController {
         try {
             // create a headers object
             HttpHeaders headers = new HttpHeaders();
+    public Object createNote(@PathVariable String guid, @RequestBody Object body) {
 
             // Tell the backend that the body of the object is JSON
             // To ensure backend can read it while sending with POSTMAN
@@ -81,6 +82,25 @@ public class GatewayController {
 
             // Wrap body and json together
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        //Wrap the body with the headers
+        //this will let us send the JSON data and its content type with it
+        HttpEntity<Object> request = new HttpEntity<>(body, headers);
+
+        // Forward POST request to backend
+        // Example:
+        // gateway receives:  POST /api/test123/notes
+        // gateway forwards: POST http://localhost:8081/api/test123/notes
+        return restTemplate.postForObject(BACKEND_URL + guid + "/notes", request, Object.class);
+    }
+
+    @PutMapping("/{id}")
+    public String updateNote(@PathVariable String guid, @PathVariable String id, @RequestBody Object body) {
+        //same as POST - set request headers
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        //Wrap body and json together
+        HttpEntity<Object> request = new HttpEntity<>(body, headers);
 
             // Forward PUT request to backend
             // Example:
