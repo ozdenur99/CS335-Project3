@@ -10,6 +10,8 @@ import java.time.Instant;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.ResponseEntity;
+
 import java.util.Objects;
 import java.util.Set;
 import java.time.temporal.ChronoUnit;
@@ -51,7 +53,7 @@ public class LogController {
     }
 
     @PostMapping("/metrics")
-    public String receiveMetrics(@RequestBody Map<String, Object> metrics) {
+    public ResponseEntity<Void> receiveMetrics(@RequestBody Map<String, Object> metrics) {
         String gatewayId = (String) metrics.getOrDefault("gatewayId", "unknown");
         latestByGateway.put(gatewayId, metrics);
         // Store in Redis sorted set with timestamp as score for time-based retrieval
@@ -68,7 +70,7 @@ public class LogController {
         } catch (Exception e) {
             // fail silently
         }
-        return "ok";
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/metrics/latest")

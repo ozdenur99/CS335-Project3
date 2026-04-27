@@ -129,7 +129,7 @@ public class AbuseFilter extends OncePerRequestFilter {
 
         // Step 6: Failure tracking (post-response)
         int status = response.getStatus();
-        if (status == 403) {
+        if (status == 403 || status == 401) {
             if (failure.recordAndCheck(clientId)) {
                 AbuseEvent event = new AbuseEvent(
                         AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,

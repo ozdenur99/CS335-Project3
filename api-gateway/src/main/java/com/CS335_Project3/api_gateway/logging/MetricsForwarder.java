@@ -35,7 +35,7 @@ public class MetricsForwarder {
             Map<String, Object> snapshot = metricsService.getSnapshot();
             snapshot.put("gatewayId", gatewayId);
             snapshot.put("timestamp", Instant.now().toEpochMilli());
-            restTemplate.postForObject(backendUrl + "logs/metrics", snapshot, String.class);
+            restTemplate.postForObject(backendUrl + "logs/metrics", snapshot, Void.class);
         } catch (Exception e) {
             log.error("MetricsForwarder failed: {}", e.getMessage());
         }
