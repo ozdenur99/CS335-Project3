@@ -39,6 +39,7 @@ public class BotDetector {
     // Redis Key Constants
     private static final String COUNT_PREFIX = "bot:count:";
     private static final String IP_SET_KEY = "bot:all_ips";
+    private static final Logger log = LoggerFactory.getLogger(BotDetector.class);
 
     private final StringRedisTemplate redis;
 
