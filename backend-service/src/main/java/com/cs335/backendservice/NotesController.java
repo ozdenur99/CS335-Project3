@@ -2,11 +2,13 @@ package com.cs335.backendservice;
 
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @RestController
 @RequestMapping("/api/{guid}/notes")
 public class NotesController {
-    private Map<String, List<Note>> notesStorage = new HashMap<>();
+    private Map<String, List<Note>> notesStorage = new ConcurrentHashMap<>();
 
     @GetMapping
     public List<Note> getNotes(@PathVariable String guid) {
@@ -15,7 +17,8 @@ public class NotesController {
 
     @PostMapping
     public Note createNote(@PathVariable String guid, @RequestBody Note note) {
-        notesStorage.computeIfAbsent(guid, k -> new ArrayList<>()).add(note);
+        // 2. Use a thread-safe list for the values
+        notesStorage.computeIfAbsent(guid, k -> new CopyOnWriteArrayList<>()).add(note);
         return note;
     }
 

@@ -24,11 +24,12 @@ public class RequestLogger {
         List<LogEntry> all = new ArrayList<>(logs); // copy queue into a list
         int size = all.size();
 
-        if (size <= 100) {
+        int logLimit = 10000;
+        if (size <= logLimit) {
             return all;
         }
-        //if its >100, shows the most recent 100
-        return all.subList(size - 100, size);
+        //if its >logLimit, shows the most recent 
+        return all.subList(size - logLimit, size);
     }
 
     //returns total number of logs stored
