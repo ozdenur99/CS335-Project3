@@ -4,7 +4,8 @@ import com.CS335_Project3.api_gateway.config.AbuseDetectionConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
+import org.mockito.Mockito;
+import org.springframework.data.redis.core.RedisTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FailureTest {
@@ -17,7 +18,8 @@ class FailureTest {
         config = new AbuseDetectionConfig();
         config.getFailure().setMaxFailuresPerWindow(3);
         config.getFailure().setWindowSeconds(60);
-        f = new Failure(config);
+        RedisTemplate<String, String> redis = Mockito.mock(RedisTemplate.class);
+        f = new Failure(redis, config);
     }
 
     @Test
@@ -64,7 +66,8 @@ class FailureTest {
     @DisplayName("Counter resets after window expires")
     void windowExpiry_resetsCounter() throws InterruptedException {
         config.getFailure().setWindowSeconds(1);
-        f = new Failure(config);
+        RedisTemplate<String, String> redis = Mockito.mock(RedisTemplate.class);
+        f = new Failure(redis, config);
         f.recordAndCheck("client-A");
         f.recordAndCheck("client-A");
         f.recordAndCheck("client-A");
