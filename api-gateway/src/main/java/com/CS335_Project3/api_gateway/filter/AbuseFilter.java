@@ -18,24 +18,28 @@ import java.util.List;
  * Abuse detection filter. Runs second in the filter chain
  *
  * DETECTION FLOW:
- *   1. Skip excluded paths
- *   2. Skip allowlisted IPs
- *   3. Check Redis blocklist → 403 if blocked
- *   4. Resolve risk score
- *   5. Forward to backend with risk headers
- *   6. Post-response failure tracking → block + Pub/Sub if threshold exceeded
+ * 1. Skip excluded paths
+ * 2. Skip allowlisted IPs
+ * 3. Check Redis blocklist → 403 if blocked
+ * 4. Resolve risk score
+ * 5. Forward to backend with risk headers
+ * 6. Post-response failure tracking → block + Pub/Sub if threshold exceeded
  */
 @Component
-//changed to @Order(2) as it caused requests to be blocked before logging could happen
-@Order(2)//runs after LoggingFilter so blocked requests are still captured in logs
+// changed to @Order(2) as it caused requests to be blocked before logging could
+// happen
+@Order(2) // runs after LoggingFilter so blocked requests are still captured in logs
 public class AbuseFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AbuseFilter.class);
-    //added new excluded paths for logging testing
-    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics", "/metrics/logs", "/metrics/logs/filter",
+    // added new excluded paths for logging testing
+    private static final List<String> EXCLUDED_PATHS = List.of("/health", "/metrics", "/metrics/logs",
+            "/metrics/logs/filter",
             "/metrics/logs/export/json", "/metrics/logs/export/csv",
             "/metrics/suspicious", "/metrics/suspicious/risk",
-            "/metrics/latency", "/metrics/risk");
+            "/metrics/latency", "/metrics/risk", "/metrics/timeseries", "/metrics/clients", "/metrics/gateway",
+            "/metrics/status",
+            "/favicon.ico");
 
     // private final Spike spike;
     private final Failure failure;
@@ -44,24 +48,27 @@ public class AbuseFilter extends OncePerRequestFilter {
     private final RiskScoreService riskScoreService;
     private final AbuseEventPublisher eventPublisher;
 
-    public AbuseFilter(Failure failure, BlockedIps blockedIps,AllowList allowList, RiskScoreService riskScoreService, AbuseEventPublisher eventPublisher) {
+    public AbuseFilter(Failure failure, BlockedIps blockedIps, AllowList allowList, RiskScoreService riskScoreService,
+            AbuseEventPublisher eventPublisher) {
         // this.spike = spike;
         this.failure = failure;
         this.blockedIps = blockedIps;
-        this.allowList        = allowList;
+        this.allowList = allowList;
         this.riskScoreService = riskScoreService;
-        this.eventPublisher   = eventPublisher;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
-                                    @NonNull HttpServletResponse response,
-                                    @NonNull FilterChain filterChain)
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain)
             throws ServletException, IOException {
 
         String path = request.getRequestURI();
-        String ip       = request.getRemoteAddr();
-        String apiKey   = request.getHeader("X-API-Key");
+        String forwarded = request.getHeader("X-Forwarded-For");
+        String ip = (forwarded != null && !forwarded.isBlank()) ? forwarded.split(",")[0].trim()
+                : request.getRemoteAddr();
+        String apiKey = request.getHeader("X-API-Key");
         String clientId = (apiKey != null && !apiKey.isBlank()) ? apiKey : ip;
 
         // Step 1: Skip excluded paths
@@ -77,7 +84,7 @@ public class AbuseFilter extends OncePerRequestFilter {
         }
 
         // Step 3: Check Redis blocklist
-        // dev-key-dynamic is exempt — used by  AIMD rate limiter tests
+        // dev-key-dynamic is exempt — used by AIMD rate limiter tests
         if (!clientId.equals("dev-key-dynamic") && blockedIps.isBlocked(clientId)) {
             log.warn("Blocked client check triggered for {}", clientId);
             AbuseEvent event = new AbuseEvent(
@@ -90,38 +97,39 @@ public class AbuseFilter extends OncePerRequestFilter {
 
         // Step 3: Spike detection
         // if (spike.recordAndCheck(clientId)) {
-        //     AbuseEvent event = new AbuseEvent(
-        //             AbuseEvent.Type.SPIKE, clientId, ip, "Request spike threshold exceeded");
-        //     log.warn(event.toString());
+        // AbuseEvent event = new AbuseEvent(
+        // AbuseEvent.Type.SPIKE, clientId, ip, "Request spike threshold exceeded");
+        // log.warn(event.toString());
 
-        //     boolean shouldBlock = failure.recordAndCheck(clientId);
-        //     log.warn("Spike recorded for clientId={}, ip={}, shouldBlock={}", clientId, ip, shouldBlock);
-        //     if (shouldBlock) {
-        //         AbuseEvent blockEvent = new AbuseEvent(
-        //                 AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
-        //                 "Repeated spike/failure threshold exceeded");
-        //         log.warn(blockEvent.toString());
-        //         blockedIps.block(clientId);
-        //         log.warn("Client {} added to blocklist", ip);
-        //     }
+        // boolean shouldBlock = failure.recordAndCheck(clientId);
+        // log.warn("Spike recorded for clientId={}, ip={}, shouldBlock={}", clientId,
+        // ip, shouldBlock);
+        // if (shouldBlock) {
+        // AbuseEvent blockEvent = new AbuseEvent(
+        // AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
+        // "Repeated spike/failure threshold exceeded");
+        // log.warn(blockEvent.toString());
+        // blockedIps.block(clientId);
+        // log.warn("Client {} added to blocklist", ip);
+        // }
 
-        //     sendError(response, request, 429,
-        //             "Too Many Requests", "Request could not be processed at this time.");
-        //     return;
+        // sendError(response, request, 429,
+        // "Too Many Requests", "Request could not be processed at this time.");
+        // return;
         // }
 
         // Step 4: Resolve risk score before forwarding
         String riskLevel = riskScoreService.getRiskLevelString(clientId);
-        int riskPercent  = riskScoreService.getRiskPercentage(clientId);
+        int riskPercent = riskScoreService.getRiskPercentage(clientId);
         // Step 5: Forward to backend with risk headers (T7)
-        HeaderForwardingRequestWrapper wrappedRequest =
-                new HeaderForwardingRequestWrapper(request, ip, riskLevel, riskPercent);
+        HeaderForwardingRequestWrapper wrappedRequest = new HeaderForwardingRequestWrapper(request, ip, riskLevel,
+                riskPercent);
 
         filterChain.doFilter(wrappedRequest, response);
 
         // Step 6: Failure tracking (post-response)
         int status = response.getStatus();
-        if (status == 403 ) {
+        if (status == 403 || status == 401) {
             if (failure.recordAndCheck(clientId)) {
                 AbuseEvent event = new AbuseEvent(
                         AbuseEvent.Type.REPEATED_FAILURE, clientId, ip,
@@ -134,14 +142,16 @@ public class AbuseFilter extends OncePerRequestFilter {
     }
 
     private void sendError(HttpServletResponse response,
-                           HttpServletRequest request,
-                           int status, String error, String message) throws IOException {
+            HttpServletRequest request,
+            int status, String error, String message) throws IOException {
         response.setStatus(status);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
+        // Include request ID for better traceability in logs
+        String requestId = response.getHeader("X-Request-ID");
         response.getWriter().write(String.format(
-                "{\"status\":%d,\"error\":\"%s\",\"message\":\"%s\",\"path\":\"%s\"}",
-                status, error, message, request.getRequestURI()
-        ));
+                "{\"status\":%d,\"error\":\"%s\",\"message\":\"%s\",\"path\":\"%s\",\"requestId\":\"%s\"}",
+                status, error, message, request.getRequestURI(),
+                requestId != null ? requestId : ""));
     }
 }

@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import java.util.Map;
+import com.CS335_Project3.api_gateway.ratelimiter.DynamicAIMDRateLimiterStrategy;
 
 class RateLimiterTest {
 
@@ -24,7 +25,7 @@ class RateLimiterTest {
         FixedWindowRateLimiterStrategy fixed = mock(FixedWindowRateLimiterStrategy.class);
         SlidingWindowRateLimiterStrategy sliding = mock(SlidingWindowRateLimiterStrategy.class);
         LeakyBucketRateLimiterStrategy leaky = mock(LeakyBucketRateLimiterStrategy.class);
-
+        DynamicAIMDRateLimiterStrategy dynamic = mock(DynamicAIMDRateLimiterStrategy.class);
         TenantRateLimitConfig config = new TenantRateLimitConfig();
 
         config.setDefaultLimit(3);
@@ -42,7 +43,7 @@ class RateLimiterTest {
 
         org.springframework.data.redis.core.StringRedisTemplate redis = mock(
                 org.springframework.data.redis.core.StringRedisTemplate.class);
-        rateLimiter = new RateLimiter(token, fixed, sliding, leaky, config, redis);
+        rateLimiter = new RateLimiter(token, fixed, sliding, leaky, dynamic, config, redis);
     }
 
     @Test
@@ -108,5 +109,5 @@ class RateLimiterTest {
     // // For now, this demonstrates the blocking behavior.
     // }
 
-    //make test for Dynamic (somehow, or ask if postman testing is sufficient)
+    // make test for Dynamic (somehow, or ask if postman testing is sufficient)
 }
