@@ -24,7 +24,7 @@ public class RequestLogger {
         List<LogEntry> all = new ArrayList<>(logs); // copy queue into a list
         int size = all.size();
 
-        int logLimit = 10000;
+        int logLimit = 100000;
         if (size <= logLimit) {
             return all;
         }
