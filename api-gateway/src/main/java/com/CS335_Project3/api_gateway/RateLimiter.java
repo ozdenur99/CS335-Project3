@@ -137,11 +137,11 @@ public class RateLimiter {
 
         // limit lowered from 5 to 3 for testing purposes
         // to trigger 429 without sending too many requests for logging
-        clientLimits.put("dev-key-token", 50);
-        clientLimits.put("dev-key-fixed", 50);
-        clientLimits.put("dev-key-sliding", 50);
-        clientLimits.put("dev-key-leaky", 50);
-        clientLimits.put("dev-key-dynamic", 100);
+        clientLimits.put("dev-key-token", 500);
+        clientLimits.put("dev-key-fixed", 500);
+        clientLimits.put("dev-key-sliding", 500);
+        clientLimits.put("dev-key-leaky", 500);
+        clientLimits.put("dev-key-dynamic", 5000);
 
         // Business client
         clientAlgorithms.put("dev-key-business", "token");
@@ -149,7 +149,7 @@ public class RateLimiter {
         // limit also lowered from 10 to 6 for testing purposes
 
         // to trigger 429 without sending too many requests for logging
-        clientLimits.put("dev-key-business", 40);
+        clientLimits.put("dev-key-business", 2000);
         // Tenant/App scoped keys — algorithm and limit are fallback only
         // Real policy comes from tenant/app config (application.properties or
         // ConfigController)
@@ -160,12 +160,12 @@ public class RateLimiter {
         clientAlgorithms.put("key-enterprise-dashboard", "fixed");
         clientAlgorithms.put("key-enterprise-api", "token");
 
-        clientLimits.put("key-acme-dashboard", 10);
-        clientLimits.put("key-acme-api", 20);
-        clientLimits.put("key-beta-dashboard", 15);
-        clientLimits.put("key-beta-api", 25);
-        clientLimits.put("key-enterprise-dashboard", 20);
-        clientLimits.put("key-enterprise-api", 50);
+        clientLimits.put("key-acme-dashboard", 1000);
+        clientLimits.put("key-acme-api", 2000);
+        clientLimits.put("key-beta-dashboard", 1500);
+        clientLimits.put("key-beta-api", 2500);
+        clientLimits.put("key-enterprise-dashboard", 2000);
+        clientLimits.put("key-enterprise-api", 5000);
 
     }
 

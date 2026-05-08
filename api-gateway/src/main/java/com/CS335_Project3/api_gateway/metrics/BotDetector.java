@@ -32,9 +32,9 @@ public class BotDetector {
     // private static final int SUSPICIOUS_THRESHOLD = 50;
 
     // risk levels for suspicious IPs
-    private static final int LOW_RISK_THRESHOLD = 50;
-    private static final int MEDIUM_RISK_THRESHOLD = 100;
-    private static final int HIGH_RISK_THRESHOLD = 200;
+    private static final int LOW_RISK_THRESHOLD = 150;
+    private static final int MEDIUM_RISK_THRESHOLD = 300;
+    private static final int HIGH_RISK_THRESHOLD = 450;
 
     // Redis Key Constants
     private static final String COUNT_PREFIX = "bot:count:";
