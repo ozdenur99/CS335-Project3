@@ -1,0 +1,172 @@
+{
+  "info": {
+    "name": "CS335 API Gateway",
+    "description": "Read every metric and drive the live-config / reset controls that Grafana (read-only) can't. Set the collection variables (gw1, gw2, adminKey, apiKey) or import the companion environment. The gateway allows all /metrics/* and /health with no auth; /admin/* needs the X-Admin-Key header.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "gw1", "value": "http://localhost:8080" },
+    { "key": "gw2", "value": "http://localhost:8082" },
+    { "key": "adminKey", "value": "admin-secret-key" },
+    { "key": "apiKey", "value": "dev-key-token" }
+  ],
+  "item": [
+    {
+      "name": "Metrics (read)",
+      "item": [
+        {
+          "name": "GET /metrics — gateway snapshot",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics" },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('has totals', () => pm.expect(pm.response.json()).to.have.property('totalRequests'));"
+          ] } } ]
+        },
+        {
+          "name": "GET /metrics/clients — per-client breakdown",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/clients" }
+        },
+        {
+          "name": "GET /metrics/status — status-code breakdown",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/status" }
+        },
+        {
+          "name": "GET /metrics/risk — rate-limit risk (all clients)",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/risk" }
+        },
+        {
+          "name": "GET /metrics/abuse-risk — abuse risk (all clients)",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/abuse-risk" },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('is an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+          ] } } ]
+        },
+        {
+          "name": "GET /metrics/latency?apiKey= — one client",
+          "request": { "method": "GET", "url": {
+            "raw": "{{gw1}}/metrics/latency?apiKey={{apiKey}}",
+            "host": [ "{{gw1}}" ], "path": [ "metrics", "latency" ],
+            "query": [ { "key": "apiKey", "value": "{{apiKey}}" } ]
+          } }
+        },
+        {
+          "name": "GET /metrics/suspicious/risk — bot IPs by level",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/suspicious/risk" }
+        },
+        {
+          "name": "GET /metrics/timeseries?range=week — history",
+          "request": { "method": "GET", "url": {
+            "raw": "{{gw1}}/metrics/timeseries?range=week",
+            "host": [ "{{gw1}}" ], "path": [ "metrics", "timeseries" ],
+            "query": [ { "key": "range", "value": "week", "description": "hour | day | week | month" } ]
+          } }
+        },
+        {
+          "name": "GET /metrics/gateway — gateway-1 vs gateway-2",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/gateway" }
+        },
+        {
+          "name": "GET /metrics/logs — last 100 requests",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/logs" }
+        },
+        {
+          "name": "GET /metrics/logs/filter — filtered logs",
+          "request": { "method": "GET", "url": {
+            "raw": "{{gw1}}/metrics/logs/filter?decision=BLOCKED&reason=rate_limit_exceeded",
+            "host": [ "{{gw1}}" ], "path": [ "metrics", "logs", "filter" ],
+            "query": [
+              { "key": "decision", "value": "BLOCKED", "description": "ALLOWED | BLOCKED" },
+              { "key": "reason", "value": "rate_limit_exceeded" },
+              { "key": "apiKey", "value": "", "disabled": true },
+              { "key": "algorithm", "value": "", "disabled": true }
+            ]
+          } }
+        },
+        {
+          "name": "GET /metrics/logs/export/json — download",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/logs/export/json" }
+        },
+        {
+          "name": "GET /metrics/logs/export/csv — download",
+          "request": { "method": "GET", "url": "{{gw1}}/metrics/logs/export/csv" }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        { "name": "GET /health — gateway-1", "request": { "method": "GET", "url": "{{gw1}}/health" } },
+        { "name": "GET /health — gateway-2", "request": { "method": "GET", "url": "{{gw2}}/health" } }
+      ]
+    },
+    {
+      "name": "Admin — live config (write)",
+      "item": [
+        {
+          "name": "GET /admin/config — current policies",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Admin-Key", "value": "{{adminKey}}" } ],
+            "url": "{{gw1}}/admin/config"
+          }
+        },
+        {
+          "name": "POST /admin/config — change a policy (live, both gateways)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Admin-Key", "value": "{{adminKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"tenant\": \"tenant-acme\",\n  \"app\": \"dashboard\",\n  \"algorithm\": \"sliding\",\n  \"limit\": 5\n}" },
+            "url": "{{gw1}}/admin/config",
+            "description": "app is optional (omit for a tenant-level change). algorithm: token | fixed | sliding | leaky | dynamic. Change syncs to both gateways instantly via Redis pub/sub."
+          },
+          "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('config accepted', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+          ] } } ]
+        },
+        {
+          "name": "GET /admin/config/audit — change history",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-Admin-Key", "value": "{{adminKey}}" } ],
+            "url": "{{gw1}}/admin/config/audit"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — reset (write)",
+      "item": [
+        {
+          "name": "POST /admin/reset/bot — clear bot detection",
+          "request": { "method": "POST", "header": [ { "key": "X-Admin-Key", "value": "{{adminKey}}" } ], "url": "{{gw1}}/admin/reset/bot" }
+        },
+        {
+          "name": "POST /admin/reset/blocked — clear blocklist",
+          "request": { "method": "POST", "header": [ { "key": "X-Admin-Key", "value": "{{adminKey}}" } ], "url": "{{gw1}}/admin/reset/blocked" }
+        },
+        {
+          "name": "POST /admin/reset/all — clear both (run before a demo)",
+          "request": { "method": "POST", "header": [ { "key": "X-Admin-Key", "value": "{{adminKey}}" } ], "url": "{{gw1}}/admin/reset/all" }
+        }
+      ]
+    },
+    {
+      "name": "Generate traffic",
+      "item": [
+        {
+          "name": "GET /api/test/notes — one proxied request",
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "X-API-KEY", "value": "{{apiKey}}" } ],
+            "url": "{{gw1}}/api/test/notes",
+            "description": "Send with different X-API-KEY values (dev-key-token, dev-key-fixed, dev-key-sliding, dev-key-leaky, dev-key-dynamic) and use the Runner to fire many times to populate the dashboard."
+          }
+        }
+      ]
+    }
+  ]
+}

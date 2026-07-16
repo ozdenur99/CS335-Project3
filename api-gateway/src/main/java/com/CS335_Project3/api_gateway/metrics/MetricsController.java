@@ -2,6 +2,7 @@ package com.CS335_Project3.api_gateway.metrics;
 
 import com.CS335_Project3.api_gateway.logging.LogEntry;
 import com.CS335_Project3.api_gateway.logging.RequestLogger;
+import com.CS335_Project3.api_gateway.filter.RiskScoreService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.http.HttpHeaders;
@@ -12,8 +13,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
@@ -30,16 +33,19 @@ public class MetricsController {
     private final MetricsService metricsService;
     private final RequestLogger requestLogger;
     private final BotDetector botDetector;
+    // exposes the abuse risk level (consecutive-failure based) per client
+    private final RiskScoreService riskScoreService;
     // makes HTTP calls to the backend service to get timeseries data
     private final RestTemplate restTemplate;
     @Value("${backend.url}")
     private String backendUrl;
 
     public MetricsController(MetricsService metricsService, RequestLogger requestLogger,
-            BotDetector botDetector, RestTemplate restTemplate) {
+            BotDetector botDetector, RiskScoreService riskScoreService, RestTemplate restTemplate) {
         this.metricsService = metricsService;
         this.requestLogger = requestLogger;
         this.botDetector = botDetector;
+        this.riskScoreService = riskScoreService;
         this.restTemplate = restTemplate;
     }
 
@@ -143,6 +149,26 @@ public class MetricsController {
         Map<String, Object> result = new HashMap<>();
         metricsService.getPerKeyCount()
                 .forEach((key, count) -> result.put(key, metricsService.getRiskScore(key) + "%"));
+        return result;
+    }
+
+    // GET /metrics/abuse-risk (returns the abuse risk level + percentage for all
+    // tracked clients). This is the SECOND risk system — based on consecutive
+    // failures, not on how close a client is to its rate limit. HIGH means the
+    // client is one failure away from being blocked by the abuse filter.
+    @GetMapping("/abuse-risk")
+    public List<Map<String, Object>> getAbuseRisk() {
+        // Returned as a flat array (one row per client) so it maps cleanly onto a
+        // Grafana table / Infinity datasource without needing UQL to flatten a
+        // dynamically-keyed object.
+        List<Map<String, Object>> result = new ArrayList<>();
+        metricsService.getPerKeyCount().forEach((key, count) -> {
+            Map<String, Object> clientRisk = new LinkedHashMap<>();
+            clientRisk.put("apiKey", key);
+            clientRisk.put("level", riskScoreService.getRiskLevelString(key));
+            clientRisk.put("percent", riskScoreService.getRiskPercentage(key));
+            result.add(clientRisk);
+        });
         return result;
     }
 

@@ -1,0 +1,35 @@
+# Grafana datasource provisioning for the API Gateway dashboard.
+#
+# The dashboard (dashboard.json) references two Infinity datasources by UID:
+#   dfk5lf85xepz4f -> gateway-1   afk5lqu9tk3k0d -> gateway-2
+# These UIDs are fixed here so the imported dashboard binds without re-mapping.
+#
+# Relative query URLs in the dashboard (e.g. /metrics, /metrics/timeseries) are
+# resolved against each datasource's base `url`. Inside the compose network the
+# gateways are reachable as gateway1 / gateway2 on container port 8080.
+apiVersion: 1
+
+datasources:
+  - name: gateway-1
+    uid: dfk5lf85xepz4f
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://gateway1:8080
+    isDefault: true
+    editable: true
+    jsonData:
+      # allow the gateway host so Infinity's proxy will fetch relative URLs
+      allowedHosts:
+        - http://gateway1:8080
+      tlsSkipVerify: true
+
+  - name: gateway-2
+    uid: afk5lqu9tk3k0d
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    url: http://gateway2:8080
+    editable: true
+    jsonData:
+      allowedHosts:
+        - http://gateway2:8080
+      tlsSkipVerify: true

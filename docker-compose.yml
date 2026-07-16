@@ -91,6 +91,9 @@ services:
       - cs335-net # Puts Grafana on the same network as API and Redis
     volumes:
       - grafana-storage:/var/lib/grafana
+      # Auto-provision the two Infinity datasources (gateway-1 / gateway-2)
+      # with the fixed UIDs the dashboard binds to.
+      - ./grafana/provisioning:/etc/grafana/provisioning
     
     #locust testing
   locust:
